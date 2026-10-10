@@ -29,9 +29,10 @@ const branchColor = computed(() => ZHI_COLOR[props.pillar.branch as ZhiName] ?? 
       <span class="k">k={{ pillar.k }}</span>
     </header>
 
+    <!-- 上下结构：天干在上、地支在下，中间留出「肩线」 -->
     <div class="chars">
-      <span class="char" :style="{ color: stemColor }">{{ pillar.stem }}</span>
-      <span class="char" :style="{ color: branchColor }">{{ pillar.branch }}</span>
+      <span class="char stem" :style="{ color: stemColor }">{{ pillar.stem }}</span>
+      <span class="char branch" :style="{ color: branchColor }">{{ pillar.branch }}</span>
     </div>
 
     <div class="ten-god" :class="{ master: isDayMaster }">{{ stemTenGod }}</div>
@@ -80,14 +81,28 @@ header {
 }
 .chars {
   display: flex;
-  gap: 10px;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 6px;
 }
 .char {
   font-size: 42px;
-  line-height: 1.1;
+  line-height: 1.15;
   font-weight: 700;
   font-family: 'Songti SC', 'SimSun', serif;
+}
+/* 肩线：把天干与地支在视觉上分成上下两格 */
+.char.stem {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--c-border);
+  min-width: 56px;
+  text-align: center;
+}
+.char.branch {
+  padding-top: 4px;
+  min-width: 56px;
+  text-align: center;
 }
 .ten-god {
   text-align: center;
@@ -125,6 +140,8 @@ header {
   color: var(--c-muted);
 }
 .index {
+  margin-top: auto; /* 藏干少的柱子把页脚顶到底部，四张卡高度对齐 */
+  padding-top: 6px;
   font-size: 11px;
   color: var(--c-muted);
   text-align: center;

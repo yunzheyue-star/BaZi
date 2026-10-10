@@ -67,7 +67,7 @@ describe('calendar：节气精度回归', () => {
         longitude: 116.4,
         timezone: 'Asia/Shanghai',
         dayBoundary: 'midnight',
-        trueSolarTime: true,
+        timeStandard: 'true_solar',
       },
       { referenceYear: 2008 },
     )

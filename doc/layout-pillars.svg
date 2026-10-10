@@ -1,0 +1,12 @@
+此文件曾是四柱版式的 SVG 示意图，因本机无 SVG 光栅化器（无法自检渲染结果）已弃用。
+
+请改用：
+
+- `doc/render-layout-spec.py` —— 按组件实际 CSS 数值重绘版式，并做几何检查
+- `layout-pillars.png`（工作区根目录）—— 该脚本的输出
+
+生成方式：
+
+```sh
+<python> doc/render-layout-spec.py
+```

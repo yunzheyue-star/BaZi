@@ -201,12 +201,14 @@ sequenceDiagram
     CH->>CH: timezoneOffsetMinutes(civil, timezone)
     CH->>CA: julianDay(civil) → birthJdUt = local − offset/1440
 
-    Note over CH: ① 真太阳时（只喂时柱）
+    Note over CH: ① 计时口径（三档时钟并列，只有时柱消费）
     CH->>CA: trueSolarCorrection(civilUt, longitude, 120)
-    CA->>CO: （无，纯计算）
     CA->>CA: equationOfTime(jd) ← solarApparentLongitude(jd)
     CA-->>CH: { longitudeDelta, eot, delta }
-    CH->>CH: 真太阳时 = 民用时 + round(delta)
+    CH->>CH: 北京时间 = 民用钟表时
+    CH->>CH: 平太阳时 = 北京时 + 经度时差
+    CH->>CH: 真太阳时 = 平太阳时 + 均时差
+    CH->>CH: 按 input.timeStandard 选一个给时柱
 
     Note over CH: ② 年柱（立春为界）
     CH->>CA: solarApparentLongitude(birthJdUt)
@@ -238,8 +240,8 @@ sequenceDiagram
     GZ-->>PL: Pillar
     PL-->>CH: 日柱
 
-    Note over CH: ⑤ 时柱（真太阳时 + 五鼠遁）
-    CH->>PL: shiChenIndex(solarHour) / hourPillar(i_d, solarHour)
+    Note over CH: ⑤ 时柱（口径选出的时钟 + 五鼠遁）
+    CH->>PL: shiChenIndex(选定时钟的小时) / hourPillar(i_d, h)
     PL->>GZ: makePillar(i_h, j_h)
     GZ-->>PL: Pillar
     PL-->>CH: 时柱
@@ -291,8 +293,13 @@ flowchart LR
     B --> C["timezoneOffsetMinutes<br/>+480 min"]
     C --> D["birthJdUt<br/>2454663.60"]
     B --> E["julianDay − offset<br/>→ civilUt"]
-    E --> F["trueSolarCorrection<br/>Δ = −20.48 min"]
-    F --> G["真太阳时<br/>10:13"]
+    E --> F["trueSolarCorrection<br/>经度时差 −14.4 / EoT −6.08"]
+    F --> G0["北京时间 10:33"]
+    F --> G1["平太阳时 10:19"]
+    F --> G2["真太阳时 10:13"]
+    G0 --> G{"input.timeStandard<br/>挑选时柱所用时间"}
+    G1 --> G
+    G2 --> G
 
     D --> H["solarApparentLongitude<br/>λ = 113.9414°"]
     D --> I["solarTermMoment(2008, 0)<br/>立春 2454505.30"]
@@ -514,8 +521,13 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph 输入
-        I1["出生时间 · 性别 · 经度 · 时区"]
-        I2["换日流派 · 真太阳时开关"]
+        I1["出生时间 · 性别 · 出生地经度 · 时区"]
+        I2["换日流派 · 计时口径（三档）"]
+    end
+    subgraph 时钟
+        C0["北京时间 = 民用钟表时"]
+        C1["平太阳时 = 北京时 + 经度时差"]
+        C2["真太阳时 = 平太阳时 + 均时差"]
     end
     subgraph 天文
         A1["太阳视黄经 λ"]
@@ -525,8 +537,8 @@ flowchart TB
     subgraph 四柱
         P1["年柱 · 立春为界"]
         P2["月柱 · 节气为界"]
-        P3["日柱 · JDN"]
-        P4["时柱 · 真太阳时 + 五鼠遁"]
+        P3["日柱 · JDN（民用日）"]
+        P4["时柱 · 口径时钟 + 五鼠遁"]
     end
     subgraph 派生
         D1["藏干 · 十神"]
@@ -538,11 +550,15 @@ flowchart TB
         O2["steps ×7（可核对）"]
     end
 
+    I1 --> C0
+    I2 --> C1
+    A3 --> C2
+    C0 --> P4
+    C1 --> P4
+    C2 --> P4
     I1 --> A1
-    I2 --> A3
     A1 --> P2
     A2 --> P1
-    A3 --> P4
     I1 --> P3
     P1 --> P2
     P3 --> P4
@@ -559,5 +575,7 @@ flowchart TB
     D3 --> O1
     A1 --> O2
     A2 --> O2
-    A3 --> O2
+    C0 --> O2
+    C1 --> O2
+    C2 --> O2
 ```

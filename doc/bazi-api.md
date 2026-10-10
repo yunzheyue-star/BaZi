@@ -31,6 +31,7 @@ type YinYang = 0 | 1                           // 0 阳 1 阴
 type PillarKey = 'year' | 'month' | 'day' | 'hour'
 type Gender = 'male' | 'female'
 type DayBoundary = 'midnight' | 'zi_hour'
+type TimeStandard = 'true_solar' | 'mean_solar' | 'standard'
 type LuckDirection = 1 | -1
 ```
 
@@ -55,12 +56,23 @@ interface Pillars { year: Pillar; month: Pillar; day: Pillar; hour: Pillar }
 interface ChartInput {
   birthDatetime: string        // "YYYY-MM-DD HH:mm"，**当地钟表时间**
   gender: Gender
-  longitude: number            // 东经为正，范围 [-180, 180]
+  longitude: number            // 出生地经度，东经为正，范围 [-180, 180]
+  birthPlace?: string          // 出生地名称（可选，仅展示与导出留痕）
   timezone: string             // IANA 名，如 "Asia/Shanghai"
   dayBoundary: DayBoundary     // 换日流派
-  trueSolarTime: boolean       // 是否启用真太阳时（仅影响时柱）
+  timeStandard: TimeStandard   // 计时口径：决定时柱用哪个时间
 }
 ```
+
+**`TimeStandard` 三档语义**
+
+| 取值 | 展示名 | 时柱所用时间 | 偏移量 `deltaMinutes` |
+| --- | --- | --- | --- |
+| `standard` | 北京时间 | 民用钟表时（东经 120° 标准时） | 恒为 `0` |
+| `mean_solar` | 平太阳时 | 民用时 + 经度时差 `(lon − 120°) × 4` | 经度时差 |
+| `true_solar` | 真太阳时 | 平太阳时 + 均时差 `EoT` | 经度时差 + 均时差 |
+
+三档都只影响**时柱**；日柱取民用日，年柱月柱取出生瞬间的太阳黄经与节气时刻（详见 [算法说明书 §13.1](bazi-algorithm.md#131-真太阳时只进时柱不进日柱-)）。
 
 ### 1.4 结果
 
@@ -85,12 +97,17 @@ interface ChartResult {
 
 ```ts
 interface TrueSolarTimeInfo {
-  hour: number; minute: number          // 真太阳时
-  localHour: number; localMinute: number// 民用时
+  hour: number; minute: number          // 时柱所用的时间（按口径选出的那个）
+  localHour: number; localMinute: number// 本地民用钟表时
+  standard: TimeStandard                // 本次采用的口径
+  standardLabel: string                 // "真太阳时" / "平太阳时" / "北京时间"
   longitudeDeltaMinutes: number         // (lon − 120) × 4
-  equationOfTimeMinutes: number         // 均时差
-  deltaMinutes: number                  // 合计（未启用时为 0）
-  applied: boolean
+  equationOfTimeMinutes: number         // 均时差（仅 true_solar 计入合计）
+  deltaMinutes: number                  // 合计偏移；standard 档为 0
+  // 三种时钟并列（无论选哪档都给出，供 UI 对照）
+  standardHour: number; standardMinute: number        // 北京时间
+  meanSolarHour: number; meanSolarMinute: number      // 出生地平太阳时
+  trueSolarHour: number; trueSolarMinute: number      // 出生地真太阳时
 }
 
 interface SolarTermInfo {
@@ -464,7 +481,7 @@ function stemIndexesOf(result: ChartResult): GanIndex[]
 
 | # | `name` | 记录的中间量 |
 | --- | --- | --- |
-| 1 | `trueSolarTime` | 民用时、经度时差、均时差、合计偏移、真太阳时、EoT 求值时刻 |
+| 1 | `trueSolarTime` | 出生地、经度、时区、口径，以及北京时间 / 平太阳时 / 真太阳时三个时钟与选用结果 |
 | 2 | `yearPillar` | 出生 UT 儒略日、本年立春时刻与儒略日、命理年、`k_y/i_y/j_y`、阴阳 |
 | 3 | `monthPillar` | λ、节起始黄经、月令、节名、节内度数、节后天数与 `k_m/i_m/j_m` |
 | 4 | `dayPillar` | 换日流派、所用民用日、JDN、`k_d/i_d/j_d` |
@@ -522,7 +539,8 @@ function useChartStore(): ChartStore
 | `pillarList` | `ComputedRef<PillarView[]>` | 分柱视图（年 月 日 时，含藏干与十神） |
 | `wuXingCount` | `ComputedRef<Record<WuXingName, number>>` | 五行计数（天干 + 地支本气） |
 | `luckDirectionLabel` | `ComputedRef<string>` | 顺排 / 逆排（取自 `steps`，不重算） |
-| `trueSolarLabel` | `ComputedRef<string>` | 真太阳时文本，如 `10:13（−20.4 分）` |
+| `trueSolarLabel` | `ComputedRef<string>` | 时柱所用时间文本，如 `真太阳时 10:13（−20.5 分）` |
+| `clockTriplet` | `ComputedRef<{key, label, clock}[]>` | 北京时间 / 平太阳时 / 真太阳时 三档对照 |
 | `calculate()` | `() => void` | 调 `buildChart({...input}, { referenceYear: 当前年 })` |
 | `applyInput(next)` | `(next: ChartInput) => void` | 整体替换输入并立即排盘 |
 | `patchInput(patch)` | `(patch: Partial<ChartInput>) => void` | 局部更新输入 |

@@ -7,10 +7,10 @@ import { storeToRefs } from 'pinia'
 
 import { CITIES, defaultInput, sampleInputA, sampleInputB, useChartStore } from '../stores/chart'
 import type { CityPreset } from '../stores/chart'
-import type { DayBoundary, Gender } from '../types/bazi'
+import type { DayBoundary, Gender, TimeStandard } from '../types/bazi'
 
 const store = useChartStore()
-const { input, error, calculating } = storeToRefs(store)
+const { input, error, calculating, result, clockTriplet } = storeToRefs(store)
 
 /** datetime-local 需要 "YYYY-MM-DDTHH:mm"，store 里存 "YYYY-MM-DD HH:mm" */
 const localDatetime = computed<string>({
@@ -18,6 +18,7 @@ const localDatetime = computed<string>({
   set: (value: string) => store.patchInput({ birthDatetime: value.replace('T', ' ') }),
 })
 
+/** 城市下拉：选中即写入经度、时区与地名 */
 const city = computed<string>({
   get: () => {
     const hit = CITIES.find(
@@ -27,9 +28,23 @@ const city = computed<string>({
   },
   set: (label: string) => {
     const hit: CityPreset | undefined = CITIES.find((c) => c.label === label)
-    if (hit) store.patchInput({ longitude: hit.longitude, timezone: hit.timezone })
+    if (hit) {
+      store.patchInput({ longitude: hit.longitude, timezone: hit.timezone, birthPlace: hit.label })
+    } else {
+      store.patchInput({ birthPlace: '' })
+    }
   },
 })
+
+/** 计时口径的三档说明 */
+const STANDARDS: { value: TimeStandard; label: string; hint: string }[] = [
+  { value: 'standard', label: '北京时间', hint: '东经 120° 标准时，不做任何时差修正' },
+  { value: 'mean_solar', label: '平太阳时', hint: '出生地经度的平太阳时，只做经度时差' },
+  { value: 'true_solar', label: '真太阳时', hint: '平太阳时 + 均时差，需出生地经度' },
+]
+
+/** 需要经度的口径 */
+const needsLongitude = computed(() => input.value.timeStandard !== 'standard')
 
 function onGender(value: Gender): void {
   store.patchInput({ gender: value })
@@ -39,9 +54,17 @@ function onDayBoundary(value: DayBoundary): void {
   store.patchInput({ dayBoundary: value })
 }
 
+function onTimeStandard(value: TimeStandard): void {
+  store.patchInput({ timeStandard: value })
+}
+
 function onLongitude(event: Event): void {
   const raw = Number((event.target as HTMLInputElement).value)
   store.patchInput({ longitude: Number.isFinite(raw) ? raw : 0 })
+}
+
+function onBirthPlace(event: Event): void {
+  store.patchInput({ birthPlace: (event.target as HTMLInputElement).value })
 }
 
 function loadSample(which: 'a' | 'b' | 'default'): void {
@@ -80,7 +103,7 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
       </div>
 
       <label class="field">
-        <span>出生地</span>
+        <span>出生地（选城市自动填经度）</span>
         <select v-model="city">
           <option v-for="item in CITIES" :key="item.label" :value="item.label">
             {{ item.label }}
@@ -90,7 +113,17 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
       </label>
 
       <label class="field">
-        <span>经度（东经为正）</span>
+        <span>出生地名称（可选）</span>
+        <input
+          :value="input.birthPlace ?? ''"
+          type="text"
+          placeholder="如：北京市海淀区"
+          @input="onBirthPlace"
+        />
+      </label>
+
+      <label class="field" :class="{ dim: !needsLongitude }">
+        <span>经度（东经为正）{{ needsLongitude ? '' : '· 当前口径不需要' }}</span>
         <input :value="input.longitude" type="number" step="0.01" min="-180" max="180" @input="onLongitude" />
       </label>
 
@@ -103,8 +136,27 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
       </label>
 
       <div class="field span-2">
+        <span>计时口径（决定时柱用哪个时间）</span>
+        <div class="segmented wide">
+          <button
+            v-for="item in STANDARDS"
+            :key="item.value"
+            type="button"
+            :class="{ active: input.timeStandard === item.value }"
+            :title="item.hint"
+            @click="onTimeStandard(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <p class="hint">
+          {{ STANDARDS.find((s) => s.value === input.timeStandard)?.hint }}
+        </p>
+      </div>
+
+      <div class="field span-2">
         <span>换日流派</span>
-        <div class="segmented">
+        <div class="segmented wide">
           <button
             type="button"
             :class="{ active: input.dayBoundary === 'midnight' }"
@@ -121,11 +173,19 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
           </button>
         </div>
       </div>
+    </div>
 
-      <label class="field span-2 checkbox">
-        <input v-model="input.trueSolarTime" type="checkbox" />
-        <span>启用真太阳时（经度时差 + 均时差，仅用于定时柱）</span>
-      </label>
+    <div v-if="result" class="clocks">
+      <div
+        v-for="item in clockTriplet"
+        :key="item.key"
+        class="clock"
+        :class="{ used: item.key === input.timeStandard }"
+      >
+        <span class="clock-label">{{ item.label }}</span>
+        <span class="clock-value">{{ item.clock }}</span>
+        <span v-if="item.key === input.timeStandard" class="clock-tag">时柱采用</span>
+      </div>
     </div>
 
     <div class="actions">
@@ -180,6 +240,13 @@ select {
   border-radius: 8px;
   overflow: hidden;
 }
+.segmented.wide {
+  display: flex;
+  width: 100%;
+}
+.segmented.wide button {
+  flex: 1;
+}
 .segmented button {
   border: 0;
   border-radius: 0;
@@ -191,6 +258,50 @@ select {
 .segmented button.active {
   background: var(--c-primary);
   color: #fff;
+}
+.field.dim {
+  opacity: 0.55;
+}
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+/** 三种时钟对照 */
+.clocks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--c-border);
+}
+.clock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-chip);
+  border: 1px solid transparent;
+}
+.clock.used {
+  border-color: var(--c-primary);
+  background: color-mix(in srgb, var(--c-primary) 12%, transparent);
+}
+.clock-label {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.clock-value {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.clock-tag {
+  font-size: 11px;
+  color: var(--c-primary);
+  font-weight: 600;
 }
 .checkbox {
   flex-direction: row;
@@ -238,6 +349,9 @@ select {
   }
   .span-2 {
     grid-column: span 1;
+  }
+  .clocks {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

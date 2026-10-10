@@ -11,7 +11,7 @@ import type { WuXingName } from '../core/constants'
 import { useChartStore } from '../stores/chart'
 
 const store = useChartStore()
-const { result, pillarList } = storeToRefs(store)
+const { result, pillarList, clockTriplet } = storeToRefs(store)
 
 /** 地支十神按柱位取 */
 const godsOf = computed(() => {
@@ -46,7 +46,7 @@ const wuXingRows = computed(() => {
       </div>
       <dl class="meta">
         <div>
-          <dt>真太阳时</dt>
+          <dt>时辰所用（{{ result.trueSolarTime.standardLabel }}）</dt>
           <dd>{{ store.trueSolarLabel }}</dd>
         </div>
         <div>
@@ -59,6 +59,18 @@ const wuXingRows = computed(() => {
         </div>
       </dl>
     </header>
+
+    <div class="clocks">
+      <div
+        v-for="item in clockTriplet"
+        :key="item.key"
+        class="clock"
+        :class="{ used: item.key === result.trueSolarTime.standard }"
+      >
+        <span class="clock-label">{{ item.label }}</span>
+        <span class="clock-value">{{ item.clock }}</span>
+      </div>
+    </div>
 
     <div class="grid">
       <PillarCard
@@ -120,6 +132,36 @@ const wuXingRows = computed(() => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
+/** 三种时钟对照条：标出时柱实际采用的那一档 */
+.clocks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-chip);
+  border: 1px solid transparent;
+}
+.clock.used {
+  border-color: var(--c-primary);
+  background: color-mix(in srgb, var(--c-primary) 12%, transparent);
+}
+.clock-label {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.clock-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 .balance {
   margin-top: 18px;
 }
@@ -156,9 +198,15 @@ const wuXingRows = computed(() => {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .clocks {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 @media (max-width: 520px) {
   .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .clocks {
     grid-template-columns: minmax(0, 1fr);
   }
 }

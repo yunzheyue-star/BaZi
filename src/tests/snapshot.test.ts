@@ -19,7 +19,7 @@ function chartOf(birthDatetime: string): ChartResult {
       longitude: 116.4,
       timezone: 'Asia/Shanghai',
       dayBoundary: 'midnight',
-      trueSolarTime: true,
+      timeStandard: 'true_solar',
     },
     { referenceYear: 2008 },
   )
@@ -157,7 +157,7 @@ describe('doc/bazi-algorithm.md §13.2 换日流派差异形态', () => {
       gender: 'male' as const,
       longitude: 116.4,
       timezone: 'Asia/Shanghai',
-      trueSolarTime: true,
+      timeStandard: 'true_solar' as const,
     }
     const midnight = buildChart({ ...base, dayBoundary: 'midnight' }, { referenceYear: 1984 })
     const ziHour = buildChart({ ...base, dayBoundary: 'zi_hour' }, { referenceYear: 1984 })

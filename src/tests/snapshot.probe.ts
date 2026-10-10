@@ -17,7 +17,7 @@ export function dumpChart(birthDatetime: string, dayBoundary: 'midnight' | 'zi_h
       longitude: 116.4,
       timezone: 'Asia/Shanghai',
       dayBoundary,
-      trueSolarTime: true,
+      timeStandard: 'true_solar',
     },
     { referenceYear: 2008 },
   )

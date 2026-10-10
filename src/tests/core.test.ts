@@ -43,7 +43,7 @@ function input(overrides: Partial<ChartInput>): ChartInput {
     longitude: 116.4,
     timezone: 'Asia/Shanghai',
     dayBoundary: REFERENCE_DAY_BOUNDARY,
-    trueSolarTime: true,
+    timeStandard: 'true_solar',
     ...overrides,
   }
 }
@@ -117,16 +117,63 @@ describe('技能 §6 参考盘（日柱存疑，逐柱对照留痕）', () => {
 })
 
 describe('技能 §6 参考盘（2008 例的中间量与派生结果）', () => {
-  it('2008-07-16 真太阳时为 10:13 左右、偏移约 −20 分钟', () => {
+  it('三种计时口径并列：北京 10:33 / 平太阳时 10:19 / 真太阳时 10:13', () => {
     const result = buildChart(input({ birthDatetime: '2008-07-16 10:33' }), {
       referenceYear: 2008,
     })
-    expect(result.trueSolarTime.hour).toBe(10)
-    expect(result.trueSolarTime.minute).toBe(13)
-    expect(Math.round(result.trueSolarTime.deltaMinutes)).toBe(-20)
-    // 经度时差固定 −14.4 分钟，其余由均时差补足
-    expect(result.trueSolarTime.longitudeDeltaMinutes).toBeCloseTo(-14.4, 2)
-    expect(result.trueSolarTime.equationOfTimeMinutes).toBeLessThan(0)
+    const info = result.trueSolarTime
+    // 北京时间 = 民用钟表时，不做修正
+    expect([info.standardHour, info.standardMinute]).toEqual([10, 33])
+    // 平太阳时 = 民用时 + 经度时差(116.4 − 120) × 4 = −14.4 分
+    expect([info.meanSolarHour, info.meanSolarMinute]).toEqual([10, 19])
+    // 真太阳时 = 平太阳时 + 均时差(−6.08) = 10:13
+    expect([info.trueSolarHour, info.trueSolarMinute]).toEqual([10, 13])
+    expect(info.longitudeDeltaMinutes).toBeCloseTo(-14.4, 2)
+    expect(info.equationOfTimeMinutes).toBeCloseTo(-6.08, 2)
+    // 默认口径是真太阳时
+    expect(info.standard).toBe('true_solar')
+    expect([info.hour, info.minute]).toEqual([10, 13])
+    expect(Math.round(info.deltaMinutes)).toBe(-20)
+  })
+
+  it('三档口径各自的 deltaMinutes 与选用时间', () => {
+    const base = { birthDatetime: '2008-07-16 10:33' } as const
+    const standard = buildChart(input({ ...base, timeStandard: 'standard' }), { referenceYear: 2008 })
+    const meanSolar = buildChart(input({ ...base, timeStandard: 'mean_solar' }), { referenceYear: 2008 })
+    const trueSolar = buildChart(input({ ...base, timeStandard: 'true_solar' }), { referenceYear: 2008 })
+
+    expect(standard.trueSolarTime.deltaMinutes).toBe(0)
+    expect([standard.trueSolarTime.hour, standard.trueSolarTime.minute]).toEqual([10, 33])
+    expect(meanSolar.trueSolarTime.deltaMinutes).toBeCloseTo(-14.4, 2)
+    expect([meanSolar.trueSolarTime.hour, meanSolar.trueSolarTime.minute]).toEqual([10, 19])
+    expect(trueSolar.trueSolarTime.deltaMinutes).toBeCloseTo(-20.48, 2)
+    expect(trueSolar.trueSolarTime.standardLabel).toBe('真太阳时')
+
+    // 口径只影响时柱：日柱三档一致
+    expect(standard.pillars.day.ganzhi).toBe(meanSolar.pillars.day.ganzhi)
+    expect(meanSolar.pillars.day.ganzhi).toBe(trueSolar.pillars.day.ganzhi)
+    // 10:19 / 10:33 / 10:13 都落在巳时（09–11 点），故本例时支不变
+    expect(meanSolar.pillars.hour.branch).toBe('巳')
+    expect(trueSolar.pillars.hour.branch).toBe('巳')
+  })
+
+  it('跨时辰才显出时柱差异：平太阳时 00:40（北京时间）在乌鲁木齐是前一日的戌时', () => {
+    // 乌鲁木齐经度 87.62 → 经度时差 (87.62 − 120) × 4 = −129.52 分钟
+    const urumqi = {
+      birthDatetime: '2008-07-16 00:40',
+      longitude: 87.62,
+    } as const
+    const standard = buildChart(input({ ...urumqi, timeStandard: 'standard' }), {
+      referenceYear: 2008,
+    })
+    const meanSolar = buildChart(input({ ...urumqi, timeStandard: 'mean_solar' }), {
+      referenceYear: 2008,
+    })
+    // 北京时间 00:40 → 子时；平太阳时 22:30 → 亥时（跨了日界）
+    expect(standard.pillars.hour.branch).toBe('子')
+    expect(meanSolar.pillars.hour.branch).toBe('亥')
+    // 日柱仍按民用日，不随口径变化
+    expect(meanSolar.pillars.day.k).toBe(standard.pillars.day.k)
   })
 
   it('2008-07-16 的月令序号为 6（未月 / 小暑后）', () => {
@@ -395,13 +442,21 @@ describe('chart：steps 顺序与内容', () => {
     expect(result.annualFortunes).toHaveLength(10)
   })
 
-  it('关闭真太阳时后时柱可能改变（2000-01-01 00:00 关闭后仍为子时）', () => {
-    const off = buildChart(
-      input({ birthDatetime: '2000-01-01 00:00', trueSolarTime: false }),
+  it('北京时间口径不做任何修正（2000-01-01 00:00 仍为子时）', () => {
+    const standard = buildChart(
+      input({ birthDatetime: '2000-01-01 00:00', timeStandard: 'standard' }),
       { referenceYear: 2000 },
     )
-    expect(off.bazi).toBe('己卯 丙子 戊午 壬子')
-    expect(off.trueSolarTime.deltaMinutes).toBe(0)
+    expect(standard.bazi).toBe('己卯 丙子 戊午 壬子')
+    expect(standard.trueSolarTime.deltaMinutes).toBe(0)
+    expect(standard.trueSolarTime.standardLabel).toBe('北京时间')
+    // 真太阳时口径下 00:00 会退到前一日的 23:43，但日柱不变（日柱取民用日）
+    const trueSolar = buildChart(
+      input({ birthDatetime: '2000-01-01 00:00', timeStandard: 'true_solar' }),
+      { referenceYear: 2000 },
+    )
+    expect([trueSolar.trueSolarTime.hour, trueSolar.trueSolarTime.minute]).toEqual([23, 43])
+    expect(trueSolar.pillars.day.ganzhi).toBe(standard.pillars.day.ganzhi)
   })
 
   it('子时换日流派把 23:00 后归入次日，日柱与时柱同步进位', () => {

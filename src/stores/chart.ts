@@ -37,14 +37,15 @@ export const CITIES: readonly CityPreset[] = [
   { label: '洛杉矶', longitude: -118.24, timezone: 'America/Los_Angeles' },
 ]
 
-/** 默认输入：技能推荐的边界配置 */
+/** 默认输入：真太阳时口径（与技能 §7 默认一致）+ 午夜换日 */
 export const defaultInput: ChartInput = {
   birthDatetime: '2008-07-16 10:33',
   gender: 'male',
   longitude: 116.4,
+  birthPlace: '北京',
   timezone: 'Asia/Shanghai',
   dayBoundary: 'midnight',
-  trueSolarTime: true,
+  timeStandard: 'true_solar',
 }
 
 /** 校验用例一：2008-07-16 10:33 男 → 戊子 己未 丁巳 乙巳 */
@@ -97,7 +98,18 @@ export const useChartStore = defineStore('chart', () => {
     const current = result.value
     const tally: Record<WuXingName, number> = { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 }
     if (!current) return tally
-    const wuXingOfGan: readonly WuXingName[] = ['木', '木', '火', '火', '土', '土', '金', '金', '水', '水']
+    const wuXingOfGan: readonly WuXingName[] = [
+      '木',
+      '木',
+      '火',
+      '火',
+      '土',
+      '土',
+      '金',
+      '金',
+      '水',
+      '水',
+    ]
     for (const key of ['year', 'month', 'day', 'hour'] as const) {
       const name = wuXingOfGan[current.pillars[key].stemIndex]!
       tally[name] += 1
@@ -112,14 +124,40 @@ export const useChartStore = defineStore('chart', () => {
     return output?.direction ?? '—'
   })
 
-  /** 真太阳时说明文本 */
+  /** 时柱所用时间的说明文本，如「真太阳时 10:13（−20.5 分）」 */
   const trueSolarLabel = computed(() => {
     const info = result.value?.trueSolarTime
     if (!info) return '—'
-    if (!info.applied) return '未启用（按民用时）'
+    const clock = `${String(info.hour).padStart(2, '0')}:${String(info.minute).padStart(2, '0')}`
+    if (info.standard === 'standard') return `${info.standardLabel} ${clock}`
     const delta = info.deltaMinutes
     const sign = delta >= 0 ? '+' : '−'
-    return `${String(info.hour).padStart(2, '0')}:${String(info.minute).padStart(2, '0')}（${sign}${Math.abs(delta).toFixed(1)} 分）`
+    return `${info.standardLabel} ${clock}（${sign}${Math.abs(delta).toFixed(1)} 分）`
+  })
+
+  /** 三种时钟的并列对照（展示与导出用） */
+  const clockTriplet = computed(() => {
+    const info = result.value?.trueSolarTime
+    if (!info) return []
+    const fmt = (h: number, m: number) =>
+      `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    return [
+      {
+        key: 'standard' as const,
+        label: '北京时间',
+        clock: fmt(info.standardHour, info.standardMinute),
+      },
+      {
+        key: 'mean_solar' as const,
+        label: '平太阳时',
+        clock: fmt(info.meanSolarHour, info.meanSolarMinute),
+      },
+      {
+        key: 'true_solar' as const,
+        label: '真太阳时',
+        clock: fmt(info.trueSolarHour, info.trueSolarMinute),
+      },
+    ]
   })
 
   /** 调用 core 排盘 */
@@ -164,10 +202,14 @@ export const useChartStore = defineStore('chart', () => {
   function exportText(): string {
     const current = result.value
     if (!current) return ''
+    const info = current.trueSolarTime
     const lines = [
       `出生：${current.input.birthDatetime}（${current.input.gender === 'male' ? '男' : '女'}）`,
-      `经度：${current.input.longitude}  时区：${current.input.timezone}`,
-      `真太阳时：${trueSolarLabel.value}`,
+      `出生地：${current.input.birthPlace ?? '（未填）'}  经度：${current.input.longitude}  时区：${current.input.timezone}`,
+      `采用口径：${info.standardLabel}`,
+      `北京时间 ${String(info.standardHour).padStart(2, '0')}:${String(info.standardMinute).padStart(2, '0')}` +
+        ` / 平太阳时 ${String(info.meanSolarHour).padStart(2, '0')}:${String(info.meanSolarMinute).padStart(2, '0')}` +
+        ` / 真太阳时 ${String(info.trueSolarHour).padStart(2, '0')}:${String(info.trueSolarMinute).padStart(2, '0')}`,
       `节气：${current.solarTerm.termName}（月令 ${current.solarTerm.monthOrder}，太阳黄经 ${current.solarTerm.lambda}°）`,
       `四柱：${current.bazi}`,
       `十神：年 ${current.tenGods.yearStem} / 月 ${current.tenGods.monthStem} / 日 日主 / 时 ${current.tenGods.hourStem}`,
@@ -195,6 +237,7 @@ export const useChartStore = defineStore('chart', () => {
     wuXingCount,
     luckDirectionLabel,
     trueSolarLabel,
+    clockTriplet,
     calculate,
     applyInput,
     patchInput,

@@ -35,6 +35,7 @@ import {
 import { branchTenGods, tenGod } from './tenGods'
 import { annualFortunes, luckCycles, luckDirection, startAgeFromDays } from './luck'
 import { shensha } from './shensha'
+import { TIME_STANDARD_LABEL } from '../types/bazi'
 import type {
   ChartInput,
   ChartResult,
@@ -129,6 +130,15 @@ function formatDate(d: CivilDate): string {
   return `${d.year}-${pad2(d.month)}-${pad2(d.day)}`
 }
 
+/** 把「分钟偏移」加到时分上并环绕到 [0, 1440)，返回时分 */
+function addMinutes(
+  clock: { hour: number; minute: number },
+  minutes: number,
+): { hour: number; minute: number } {
+  const total = mod(clock.hour * 60 + clock.minute + Math.round(minutes), 1440)
+  return { hour: Math.floor(total / 60), minute: total % 60 }
+}
+
 /** 儒略日 → "2008-02-04 19:00"（用于展示节气时刻） */
 function jdToLabel(jd: number): string {
   const dt = fromJulianDay(jd)
@@ -165,45 +175,66 @@ export function buildChart(input: ChartInput, options: BuildChartOptions = {}): 
   const birthJdUt = civilJdLocal - tzOffsetMinutes / 1440
   const civilUt: CivilDateTime = fromJulianDay(birthJdUt)
 
-  // 均时差按出生瞬间求值；日柱不受真太阳时影响（口径见 README「流派与口径」）
+  // 三种时钟都算出来，再按口径挑一个给时柱用：
+  //   北京时间 = 民用钟表时（东经 120° 标准时）
+  //   平太阳时 = 民用时 + 经度时差
+  //   真太阳时 = 民用时 + 经度时差 + 均时差
+  // 注意：日柱与节气/年柱判定都不使用这三个值（口径见 README「流派与口径」）
   const correction = trueSolarCorrection(civilUt, input.longitude, STANDARD_MERIDIAN)
-  const applied = input.trueSolarTime
-  const offsetMinutes = applied ? correction.deltaMinutes : 0
-  const totalMinutes = mod(civil.hour * 60 + civil.minute + Math.round(offsetMinutes), 1440)
-  const solarHour = Math.floor(totalMinutes / 60)
-  const solarMinute = totalMinutes % 60
+  const standardClock = { hour: civil.hour, minute: civil.minute }
+  const meanSolarClock = addMinutes(standardClock, correction.longitudeDeltaMinutes)
+  const trueSolarClock = addMinutes(standardClock, correction.deltaMinutes)
+
+  const standard = input.timeStandard
+  const usedClock =
+    standard === 'true_solar' ? trueSolarClock : standard === 'mean_solar' ? meanSolarClock : standardClock
+  const hourDeltaMinutes =
+    standard === 'true_solar' ? correction.deltaMinutes : standard === 'mean_solar' ? correction.longitudeDeltaMinutes : 0
+  const solarHour = usedClock.hour
+  const solarMinute = usedClock.minute
 
   const trueSolarTimeInfo: TrueSolarTimeInfo = {
     hour: solarHour,
     minute: solarMinute,
     localHour: civil.hour,
     localMinute: civil.minute,
+    standard,
+    standardLabel: TIME_STANDARD_LABEL[standard],
     longitudeDeltaMinutes: round(correction.longitudeDeltaMinutes, 2),
     equationOfTimeMinutes: round(correction.equationOfTimeMinutes, 2),
-    deltaMinutes: round(offsetMinutes, 2),
-    applied,
+    deltaMinutes: round(hourDeltaMinutes, 2),
+    standardHour: standardClock.hour,
+    standardMinute: standardClock.minute,
+    meanSolarHour: meanSolarClock.hour,
+    meanSolarMinute: meanSolarClock.minute,
+    trueSolarHour: trueSolarClock.hour,
+    trueSolarMinute: trueSolarClock.minute,
   }
 
   steps.push({
     name: 'trueSolarTime',
-    formula: 'T_solar = T_local + (longitude − 120°) × 4min + EoT',
+    formula:
+      '北京时间 = T_local；平太阳时 = T_local + (lon − 120°)×4min；真太阳时 = 平太阳时 + EoT',
     inputs: {
       birthDatetime: input.birthDatetime,
+      birthPlace: input.birthPlace ?? '（未填）',
       longitude: input.longitude,
       timezone: input.timezone,
       utcOffsetMinutes: tzOffsetMinutes,
-      trueSolarTimeEnabled: applied,
+      timeStandard: `${standard}（${TIME_STANDARD_LABEL[standard]}）`,
       eotEvaluatedAtUt: formatCivil(civilUt),
     },
     output: {
       civilTime: formatCivil(civil),
+      北京时间: `${pad2(standardClock.hour)}:${pad2(standardClock.minute)}`,
+      平太阳时: `${pad2(meanSolarClock.hour)}:${pad2(meanSolarClock.minute)}`,
+      真太阳时: `${pad2(trueSolarClock.hour)}:${pad2(trueSolarClock.minute)}`,
       longitudeDeltaMinutes: trueSolarTimeInfo.longitudeDeltaMinutes,
       equationOfTimeMinutes: trueSolarTimeInfo.equationOfTimeMinutes,
-      deltaMinutes: trueSolarTimeInfo.deltaMinutes,
-      trueSolarTime: `${pad2(solarHour)}:${pad2(solarMinute)}`,
-      note: applied
-        ? '已启用真太阳时：只用于定时柱（时支 + 五鼠遁时干），日柱仍取民用日'
-        : '未启用真太阳时（按民用时定时柱）',
+      采用口径: TIME_STANDARD_LABEL[standard],
+      采用偏移分钟: trueSolarTimeInfo.deltaMinutes,
+      时柱所用时间: `${pad2(solarHour)}:${pad2(solarMinute)}`,
+      note: `只用于定时柱（时支 + 五鼠遁时干）；日柱取民用日，年柱月柱取出生瞬间的黄经与节气`,
     },
   })
 
