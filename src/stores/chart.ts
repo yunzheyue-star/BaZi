@@ -15,6 +15,7 @@ import { shenshaByPillar } from '../core/shenshaMore'
 import { countWuXingAll, countWuXingMajor, wuXingTotal as totalOfWuXing } from '../core/wuXing'
 import type { CountWuXing } from '../core/wuXing'
 import type { ChartInput, ChartResult, PillarKey, TimeStandard } from '../types/bazi'
+import { TIME_STANDARD_LABEL } from '../types/bazi'
 
 /** 常用城市（经度 + 时区），表单下拉用 */
 export interface CityPreset {
@@ -267,7 +268,7 @@ export const useChartStore = defineStore('chart', () => {
     return `${info.standardLabel} ${clock}（${sign}${Math.abs(delta).toFixed(1)} 分）`
   })
 
-  /** 两档时钟并列对照：北京时间（平太阳时）/ 真太阳时 */
+  /** 两档时钟并列对照：平太阳时（即北京时间）/ 真太阳时 */
   const clockPair = computed(() => {
     const info = result.value?.trueSolarTime
     if (!info) return []
@@ -276,12 +277,12 @@ export const useChartStore = defineStore('chart', () => {
     return [
       {
         key: 'standard' as const,
-        label: '北京时间（平太阳时）',
+        label: TIME_STANDARD_LABEL.standard,
         clock: fmt(info.standardHour, info.standardMinute),
       },
       {
         key: 'true_solar' as const,
-        label: '真太阳时',
+        label: TIME_STANDARD_LABEL.true_solar,
         clock: fmt(info.trueSolarHour, info.trueSolarMinute),
       },
     ]
