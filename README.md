@@ -88,17 +88,37 @@ src/
 
 ## 精度声明与 TODO
 
-- 太阳视黄经用「平黄经 + 中心差 + 主要摄动项 + 光行差」简化解析式，误差约 0.02°；
-  节气时刻折合约 ±30 分钟。对月柱定界与立春定年在绝大多数时刻安全，
-  但**出生时刻距节气 1 小时以内时建议人工复核**。
-- 未计入 ΔT（TT − UT），量级约 1 分钟，对节气判定无影响。
-- `TODO(astro)`：替换为 skyfield / ephem / astronomia 的 VSOP87D，可把节气误差压到秒级。
-  替换点集中在 `core/calendar.ts` 的 `solarApparentLongitude()` 与 `solarTermMoment()`。
+- 太阳视黄经用「平黄经 + 中心差 + 主要摄动项 + 光行差」简化解析式。
+  **实测**（见 `src/tests/accuracy.test.ts`）跨 1984–2024 六个节气时刻，与公开值相差
+  **−6 ~ +10 分钟**（折合黄经约 ±0.007°）：
+  2024 立春 −3、2024 惊蛰 −6、2008 立春 +7、2008 立秋 0、2000 立春 −3、1984 立春 +10（单位：分钟）。
+- 未计入 ΔT（TT − UT）：2000 年前后约 +64 秒，1984 年约 +54 秒，量级 1 分钟，被容差覆盖。
+- **实用判据**：出生时刻距节气 **15 分钟以内**时建议人工复核年柱/月柱；超出该窗口判定可靠。
+- `TODO(astro)`：替换为 skyfield / ephem / astronomia 的 VSOP87D 并把 ΔT 纳入，
+  可把节气误差压到秒级。替换点集中在 `core/calendar.ts` 的 `solarApparentLongitude()` 与 `solarTermMoment()`，
+  其余逻辑（四柱、十神、大运等）无需改动。
 
 ## 校验用例
 
-`src/tests/core.test.ts` 共 34 个用例（含八字硬校验 + JDN/CRT/十神/大运/换日/异常输入），
-另有 `src/__tests__/App.spec.ts` 验证页面挂载即出盘。
+| 测试文件 | 项数 | 覆盖 |
+| --- | --- | --- |
+| `src/tests/core.test.ts` | 34 | 八字硬校验、JDN/CRT/十神/大运/换日、异常输入、steps 契约 |
+| `src/tests/accuracy.test.ts` | 9 | 节气精度回归（±20 分钟容差）、时区偏移反解、起运天数 |
+| `src/tests/snapshot.test.ts` | 11 | 文档 §15 算例的每个中间量、§13.2 换日流派差异形态 |
+| `src/__tests__/App.spec.ts` | 1 | 页面挂载即出盘 |
+
+合计 **55 项**，`npm run test:unit` 一次跑完。
+`src/tests/snapshot.probe.ts` 是数值快照探针（无 `.test` 后缀，不参与测试收集）。
+
+## 文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| [doc/bazi-api.md](doc/bazi-api.md) | 接口文档：全部导出函数的签名、类型、异常与组件契约 |
+| [doc/bazi-algorithm.md](doc/bazi-algorithm.md) | 算法说明书：公式推导、边界口径、精度实测、完整算例 |
+| [doc/bazi-call-graph.md](doc/bazi-call-graph.md) | 调用关系图：分层架构、模块依赖、执行时序、状态流转（9 张 Mermaid 图，已通过解析器校验） |
+
+图表语法自检：`npm install mermaid --no-save --no-package-lock && node mermaid-check.mjs`（脚本本身不参与构建与测试）。
 
 **点名的两组（硬校验，全部四柱一致）：**
 
