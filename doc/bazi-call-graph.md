@@ -51,6 +51,7 @@ flowchart TD
         K6["tenGods.ts"]
         K7["luck.ts"]
         K8["shensha.ts"]
+        K11["shenshaMore.ts<br/>按柱神煞（扩充）"]
         K9["wuXing.ts"]
         K10["regions.ts<br/>行政区划数据（脚本生成）"]
     end
@@ -74,6 +75,7 @@ flowchart TD
     S1 --> K5
     S1 --> K9
     S1 --> K7
+    S1 --> K11
     H1 --> K1
 
     K1 --> K2
@@ -94,6 +96,7 @@ flowchart TD
     K8 --> K5
     K9 --> K5
     K9 --> K4
+    K11 --> K5
 
     K1 -.-> T1
     K2 -.-> T1
@@ -103,6 +106,7 @@ flowchart TD
     K7 -.-> T1
     K8 -.-> T1
     K9 -.-> T1
+    K11 -.-> T1
     S1 -.-> T1
 
     K5 -.->|"展示层直连的 core 模块（只取颜色与汉字表）"| C3
@@ -112,7 +116,7 @@ flowchart TD
     classDef data fill:#f3e8ff,stroke:#7c3aed,color:#2e1065
     classDef state fill:#fff4e5,stroke:#a9762f,color:#4a2f0b
     classDef view fill:#eefaf1,stroke:#2f9e6f,color:#0d3a22
-    class K1,K2,K3,K4,K5,K6,K7,K8,K9 pure
+    class K1,K2,K3,K4,K5,K6,K7,K8,K9,K11 pure
     class K10 data
     class S1,H1 state
     class C0,C1,C2,C3,C4,C5,C6,C7,C8 view
@@ -141,7 +145,8 @@ flowchart LR
     constants["constants.ts<br/>查表"]
     tenGods["tenGods.ts<br/>十神"]
     luck["luck.ts<br/>大运 / 流年"]
-    shensha["shensha.ts<br/>神煞"]
+    shensha["shensha.ts<br/>神煞（基础五类）"]
+    shenshaMore["shenshaMore.ts<br/>按柱神煞（扩充）"]
     wuXing["wuXing.ts<br/>五行计数"]
     regions["regions.ts<br/>行政区划（脚本生成）"]
     types["types/bazi.ts"]
@@ -164,6 +169,7 @@ flowchart LR
     luck --> constants
     luck --> tenGods
     shensha --> constants
+    shenshaMore --> constants
     ganzhi --> constants
     calendar --> ganzhi
     calendar --> constants
@@ -175,6 +181,7 @@ flowchart LR
     tenGods -.-> types
     luck -.-> types
     shensha -.-> types
+    shenshaMore -.-> types
     wuXing -.-> types
 
     classDef leaf fill:#f5f7fa,stroke:#6b7280,color:#1f2329
@@ -454,7 +461,8 @@ flowchart TD
     PG -->|"selectPillar() / setTimeStandard()"| STORE
     TGP -->|"result.tenGods / selectedPillar"| STORE
     TGP -->|"selectPillar()"| STORE
-    SL -->|"result.shensha"| STORE
+    SL -->|"result.shensha / selectedShenshaHits"| STORE
+    SL -->|"selectPillar()"| STORE
     LCT -->|"result.luckCycles / selectedLuckN"| STORE
     LCT -->|"selectLuck()"| STORE
     AFT -->|"annualsOfSelectedLuck / selectedLuck"| STORE
@@ -466,6 +474,7 @@ flowchart TD
     STORE -->|"buildChart()（含 setTimeStandard 重新排盘）"| CORE["core/chart.ts"]
     STORE -->|"annualFortunes()（完整流年表）"| LUCK["core/luck.ts"]
     STORE -->|"countWuXingMajor / countWuXingAll"| WX["core/wuXing.ts"]
+    STORE -->|"shenshaByPillar()（按柱神煞）"| SHM["core/shenshaMore.ts"]
 
     classDef ui fill:#eefaf1,stroke:#2f9e6f,color:#0d3a22
     classDef data fill:#fff4e5,stroke:#a9762f,color:#4a2f0b

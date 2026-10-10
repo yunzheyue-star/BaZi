@@ -16,8 +16,15 @@ import { useChartStore } from '../stores/chart'
 import type { PillarKey, TimeStandard } from '../types/bazi'
 
 const store = useChartStore()
-const { result, pillarList, clockPair, selectedPillar, selectedPillarDetail, input } =
-  storeToRefs(store)
+const {
+  result,
+  pillarList,
+  clockPair,
+  selectedPillar,
+  selectedPillarDetail,
+  selectedShenshaNames,
+  input,
+} = storeToRefs(store)
 
 /** 地支十神按柱位取 */
 const godsOf = computed(() => {
@@ -184,22 +191,12 @@ function onPickClock(value: TimeStandard): void {
         </dl>
 
         <div class="detail-shensha">
-          <h4>本柱神煞</h4>
-          <ul v-if="selectedPillarDetail.shensha.length > 0" class="hits">
-            <li v-for="hit in selectedPillarDetail.shensha" :key="hit.name">
-              <b>{{ hit.name }}</b>
-              <span class="branches">{{ hit.branches.join(' · ') }}</span>
-              <span class="reason">{{ hit.reason }}</span>
-            </li>
-          </ul>
-          <p v-else class="empty">本柱未命中神煞。</p>
-
-          <h4 v-if="selectedPillarDetail.allShensha.length > 0">全盘命中（共 {{ selectedPillarDetail.allShensha.length }} 项）</h4>
-          <ul v-if="selectedPillarDetail.allShensha.length > 0" class="all">
-            <li v-for="hit in selectedPillarDetail.allShensha" :key="hit.name">
-              {{ hit.name }} <span class="muted">{{ hit.positions.length }} 处</span>
-            </li>
-          </ul>
+          <h4>本柱神煞（{{ selectedShenshaNames.length }}）</h4>
+          <p v-if="selectedShenshaNames.length === 0" class="empty">本柱未命中神煞。</p>
+          <div v-else class="names">
+            <span v-for="name in selectedShenshaNames" :key="name" class="name-chip">{{ name }}</span>
+          </div>
+          <p class="empty hint">判定依据见右侧「神煞」面板</p>
         </div>
       </div>
     </div>
@@ -404,8 +401,21 @@ function onPickClock(value: TimeStandard): void {
   color: var(--c-muted);
   font-weight: 600;
 }
-.detail-shensha h4 + h4 {
-  margin-top: 12px;
+.detail-shensha .names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.detail-shensha .name-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fdecec;
+  color: #b3261e;
+  font-size: 12px;
+  font-weight: 600;
+}
+.detail-shensha .hint {
+  margin-top: 8px;
 }
 .hits,
 .all {

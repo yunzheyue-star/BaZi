@@ -11,6 +11,7 @@ import { computed, ref } from 'vue'
 
 import { buildChart } from '../core/chart'
 import { annualFortunes } from '../core/luck'
+import { shenshaByPillar } from '../core/shenshaMore'
 import { countWuXingAll, countWuXingMajor, wuXingTotal as totalOfWuXing } from '../core/wuXing'
 import type { CountWuXing } from '../core/wuXing'
 import type { ChartInput, ChartResult, PillarKey, TimeStandard } from '../types/bazi'
@@ -116,6 +117,35 @@ export const useChartStore = defineStore('chart', () => {
   const selectedTenGodKey = ref<PillarKey>('day')
   /** 当前选中的大运步序 n；null = 未选，流年显示全部 */
   const selectedLuckN = ref<number | null>(null)
+
+  /** 按柱统计的神煞（核心规则在 core/shenshaMore.ts，这里只做缓存与取用） */
+  const shenshaPerPillar = computed(() => {
+    const current = result.value
+    if (!current) return null
+    return shenshaByPillar(
+      current.pillars,
+      current.pillars.day.stemIndex,
+      current.pillars.year.stemIndex,
+    )
+  })
+
+  /** 选中柱命中的神煞名 */
+  const selectedShenshaNames = computed(() => {
+    const per = shenshaPerPillar.value
+    if (!per) return []
+    return per.byPillar[selectedPillar.value]
+  })
+
+  /** 选中柱的神煞明细（含判定依据） */
+  const selectedShenshaHits = computed(() => {
+    const per = shenshaPerPillar.value
+    if (!per) return []
+    const names = per.byPillar[selectedPillar.value]
+    return per.hits.filter((hit) => names.includes(hit.name))
+  })
+
+  /** 全盘神煞明细（去重后的规则集合） */
+  const allShenshaHits = computed(() => shenshaPerPillar.value?.hits ?? [])
 
   /** 选中柱的明细（供四柱详情面板使用） */
   const selectedPillarDetail = computed(() => {
@@ -348,6 +378,10 @@ export const useChartStore = defineStore('chart', () => {
     selectedLuckN,
     selectedPillarDetail,
     selectedLuck,
+    shenshaPerPillar,
+    selectedShenshaNames,
+    selectedShenshaHits,
+    allShenshaHits,
     fullAnnualFortunes,
     annualsOfSelectedLuck,
     isPillarSelected,

@@ -37,7 +37,8 @@ src/
 │   ├── tenGods.ts             # 十神
 │   ├── wuXing.ts              # 五行计数（本气 / 藏干两种口径）
 │   ├── luck.ts                # 大运（含流年覆盖区间）、流年
-│   ├── shensha.ts             # 神煞
+│   ├── shensha.ts             # 神煞（基础五类：天乙贵人/桃花/驿马/华盖/羊刃）
+│   ├── shenshaMore.ts         # 神煞（扩充二十余类 + **按柱定位**，界面用这个）
 │   └── chart.ts               # 总入口 buildChart(input, options) + steps 中间量
 ├── components/                # 8 个展示组件，均不写算法
 │   ├── BirthForm.vue          # 三级级联选地址 → 写回经纬度；收集输入
@@ -68,6 +69,7 @@ src/
 | 大运 | `d = +1` 阳男阴女否则 `−1`；`k_luck(n) = (k_m + d·n) mod 60`；起运 `Δ/3` 天（§3.7） | `core/luck.ts` |
 | 流年 | `k_year(Y) = (Y − 4) mod 60`（§3.8） | `core/luck.ts` |
 | 神煞 | 天乙贵人 / 桃花 / 驿马 / 华盖 / 羊刃（§3.9） | `core/shensha.ts` |
+| 神煞（按柱） | 扩充二十余类 + 「命中在哪一柱」的定位规则 | `core/shenshaMore.ts` |
 | 中间量 | 七个 step：trueSolarTime → yearPillar → monthPillar → dayPillar → hourPillar → tenGods → luckCycles（§5.2） | `core/chart.ts` |
 
 ## 流派与口径（重要）
@@ -136,6 +138,10 @@ src/
 - **四柱全部可点**：点任意一柱 → 下方详情面板显示该柱的干支、天干十神、藏干十神、
   **该柱命中的神煞**与全盘命中列表。默认选中日柱（日主）。
 - **十神面板每一行也可点**：与四柱共用同一个选中态（存在 store），点哪边另一边同步高亮。
+- **神煞面板随选中柱切换**：点年柱看年柱的神煞、点月干看月干的神煞——每条都带判定依据
+  （如「年支戌属寅午戌局 → 劫煞在亥（落亥日支）」），下方可展开全盘命中。
+  规则在 `core/shenshaMore.ts`，共二十余类；定位规则见
+  [算法说明书 §13.2](doc/bazi-algorithm.md#132-按柱神煞coreshenshamorets)。
 - **点大运 → 流年跟着切**：大运表点第 1 步「庚申」（8–17 岁 / 2015–2024），
   流年表立刻只显示 2015–2024；再点一次同一步（或点「显示全部流年」）恢复。
   各步覆盖区间首尾相接、不重叠（`coveredFromYear[i] === coveredToYear[i−1] + 1`，有测试守着）。
@@ -194,9 +200,10 @@ src/
 | `src/tests/wuXing.test.ts` | 8 | 五行计数（含 0 土 0 水 回归）、干支遍历、与 buildChart 一致性 |
 | `src/tests/interaction.test.ts` | 14 | 三级行政区划数据与容错、选中柱联动、口径切换、大运↔流年联动 |
 | `src/tests/trueSolar.test.ts` | 8 | 真太阳时经度时差回归（天等县案例：08:16 → 甲辰）、错误值锁死 |
+| `src/tests/shensha.test.ts` | 15 | 按柱神煞规则（丙戌 庚寅 丁亥 甲辰 的逐柱映射）、换盘防误报、面板联动 |
 | `src/__tests__/App.spec.ts` | 1 | 页面挂载即出盘 |
 
-合计 **90 项**，`npm run test:unit` 一次跑完。
+合计 **106 项**，`npm run test:unit` 一次跑完。
 `src/tests/*.probe.ts` 是数值探针（无 `.test` 后缀，不参与测试收集）。
 
 ## 文档索引

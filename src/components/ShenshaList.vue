@@ -1,89 +1,163 @@
 <script setup lang="ts">
 /**
- * ShenshaList：展示神煞。不查表（数据来自 store.result.shensha）。
+ * ShenshaList：展示神煞。
+ *
+ * **主区域随「当前选中柱」切换** —— 点四柱或十神面板的任意柱，这里就显示该柱命中的神煞，
+ * 每条都带判定依据。下方「全盘命中」给出整张盘的所有神煞，可折叠。
+ *
+ * 判定规则在 `core/shenshaMore.ts`，本组件只负责展示与切换。
  */
-import { computed } from 'vue'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useChartStore } from '../stores/chart'
+import type { PillarKey } from '../types/bazi'
 
 const store = useChartStore()
-const { result } = storeToRefs(store)
+const { result, selectedPillar, selectedShenshaHits, allShenshaHits, shenshaPerPillar } =
+  storeToRefs(store)
 
-/** 全部五类神煞的命中状态（含未命中的，便于对照） */
-const flagRows = computed(() => {
-  const flags = result.value?.shensha.flags
-  if (!flags) return []
-  return Object.entries(flags).map(([name, hit]) => ({ name, hit }))
-})
+/** 全盘命中是否展开 */
+const showAll = ref(false)
+
+const PILLAR_KEYS: PillarKey[] = ['year', 'month', 'day', 'hour']
+
+const PILLAR_LABEL: Record<PillarKey, string> = {
+  year: '年柱',
+  month: '月柱',
+  day: '日柱',
+  hour: '时柱',
+}
+
+/** 柱位 → 该柱命中的神煞数（切换按钮上的角标） */
+function countOf(key: PillarKey): number {
+  return shenshaPerPillar.value?.byPillar[key].length ?? 0
+}
+
+function pick(key: PillarKey): void {
+  store.selectPillar(key)
+}
 </script>
 
 <template>
   <section v-if="result" class="card">
-    <h2>神煞</h2>
+    <header class="head">
+      <h2>神煞</h2>
+      <span class="tip">随选中柱变化</span>
+    </header>
 
-    <ul class="flags">
-      <li v-for="row in flagRows" :key="row.name" :class="{ on: row.hit }">
-        <span class="dot" />
-        <span class="name">{{ row.name }}</span>
-        <span class="state">{{ row.hit ? '命中' : '无' }}</span>
-      </li>
-    </ul>
+    <!-- 柱切换：与四柱 / 十神面板共享同一个选中态 -->
+    <div class="tabs">
+      <button
+        v-for="key in PILLAR_KEYS"
+        :key="key"
+        type="button"
+        :class="{ active: selectedPillar === key }"
+        @click="pick(key)"
+      >
+        {{ PILLAR_LABEL[key] }}
+        <span class="badge" :class="{ zero: countOf(key) === 0 }">{{ countOf(key) }}</span>
+      </button>
+    </div>
 
-    <h3>命中说明</h3>
-    <ul v-if="result.shensha.hits.length" class="hits">
-      <li v-for="hit in result.shensha.hits" :key="hit.name">
-        <b>{{ hit.name }}</b>
-        <span class="branches">{{ hit.branches.join(' · ') }}</span>
+    <div class="current">
+      <h3>
+        {{ PILLAR_LABEL[selectedPillar] }}（{{ result.pillars[selectedPillar].ganzhi }}）命中神煞
+        <span class="count">{{ selectedShenshaHits.length }} 项</span>
+      </h3>
+
+      <ul v-if="selectedShenshaHits.length > 0" class="hits">
+        <li v-for="hit in selectedShenshaHits" :key="hit.name">
+          <span class="name">{{ hit.name }}</span>
+          <span class="target">{{ hit.targetName }}</span>
+          <span class="reason">{{ hit.reason }}</span>
+        </li>
+      </ul>
+      <p v-else class="empty">本柱未命中神煞。</p>
+    </div>
+
+    <button type="button" class="toggle" @click="showAll = !showAll">
+      {{ showAll ? '收起全盘命中' : `展开全盘命中（${allShenshaHits.length} 条）` }}
+    </button>
+
+    <ul v-if="showAll" class="all">
+      <li v-for="(hit, i) in allShenshaHits" :key="`${hit.name}-${i}`">
+        <span class="name">{{ hit.name }}</span>
+        <span class="target">{{ hit.targetName }}</span>
+        <span class="positions">{{ hit.positions.map((k) => PILLAR_LABEL[k]).join('、') }}</span>
         <span class="reason">{{ hit.reason }}</span>
-        <span class="pos">{{ hit.positions.length }} 处</span>
       </li>
     </ul>
-    <p v-else class="empty">本盘未命中基础版神煞表中的任何一项。</p>
   </section>
 </template>
 
 <style scoped>
-.flags {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
 }
-.flags li {
+.head h2 {
+  margin: 0;
+}
+.tip {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+/** 柱切换按钮：与四柱选中态同步 */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.tabs button {
+  flex: 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
+  padding: 7px 10px;
   border: 1px solid var(--c-border);
-  background: var(--c-chip);
-  font-size: 13px;
+  border-radius: 8px;
+  background: var(--c-input);
   color: var(--c-muted);
+  font-size: 13px;
+  cursor: pointer;
 }
-.flags li.on {
-  border-color: #b3261e;
-  background: #fdecec;
-  color: #b3261e;
+.tabs button:hover {
+  border-color: var(--c-primary);
+}
+.tabs button.active {
+  border-color: var(--c-primary);
+  background: color-mix(in srgb, var(--c-primary) 14%, transparent);
+  color: var(--c-primary);
   font-weight: 700;
 }
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.5;
+.badge {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fdecec;
+  color: #b3261e;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
 }
-.flags li.on .dot {
-  opacity: 1;
-}
-h3 {
-  margin: 18px 0 8px;
-  font-size: 13px;
+.badge.zero {
+  background: var(--c-chip);
   color: var(--c-muted);
+}
+.current h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
   font-weight: 600;
+}
+.current .count {
+  margin-left: 6px;
+  color: var(--c-muted);
+  font-weight: 400;
 }
 .hits {
   list-style: none;
@@ -95,30 +169,76 @@ h3 {
 }
 .hits li {
   display: grid;
-  grid-template-columns: 72px 84px 1fr 48px;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: 80px 76px 1fr;
+  gap: 8px;
+  align-items: baseline;
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--c-chip);
-  font-size: 13px;
+  font-size: 12px;
 }
-.branches {
+.hits .name {
+  font-weight: 700;
+}
+.hits .target {
   font-family: 'Songti SC', 'SimSun', serif;
   font-size: 15px;
+  color: var(--c-primary);
 }
 .reason {
-  color: var(--c-muted);
-  font-size: 12px;
-}
-.pos {
-  text-align: right;
-  font-size: 12px;
   color: var(--c-muted);
 }
 .empty {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--c-muted);
+}
+.toggle {
+  margin-top: 14px;
+  padding: 5px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-input);
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.toggle:hover {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+}
+.all {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.all li {
+  display: grid;
+  grid-template-columns: 80px 76px 84px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--c-chip);
+  font-size: 12px;
+}
+.all .name {
+  font-weight: 600;
+}
+.all .target {
+  font-family: 'Songti SC', 'SimSun', serif;
+  color: var(--c-primary);
+}
+.all .positions {
+  color: var(--c-text);
+}
+@media (max-width: 640px) {
+  .hits li,
+  .all li {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

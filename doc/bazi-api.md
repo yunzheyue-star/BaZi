@@ -556,7 +556,11 @@ function useChartStore(): ChartStore
 | `selectedPillar` | `Ref<PillarKey>` | 当前选中柱，默认 `'day'`（日主） |
 | `selectedTenGodKey` | `Ref<PillarKey>` | 十神面板联动的选中柱 |
 | `selectedLuckN` | `Ref<number \| null>` | 当前选中大运步序，`null` = 未选（流年显示全部） |
-| `selectedPillarDetail` | `ComputedRef<... \| null>` | 选中柱详情：干支、天干十神、藏干十神、**该柱命中的神煞**、全盘命中 |
+| `selectedPillarDetail` | `ComputedRef<... \| null>` | 选中柱详情：干支、天干十神、藏干十神、该柱命中的神煞名、全盘命中 |
+| `shenshaPerPillar` | `ComputedRef<{hits, byPillar} \| null>` | 按柱神煞全量（含判定依据） |
+| `selectedShenshaNames` | `ComputedRef<string[]>` | 选中柱命中的神煞名（去重） |
+| `selectedShenshaHits` | `ComputedRef<ShenshaRuleHit[]>` | 选中柱的神煞明细（可能同一神煞多条来源） |
+| `allShenshaHits` | `ComputedRef<ShenshaRuleHit[]>` | 全盘神煞明细 |
 | `selectedLuck` | `ComputedRef<LuckStep \| null>` | 选中大运步（未选时取第一步，供高亮/展示） |
 | `fullAnnualFortunes` | `ComputedRef<AnnualStep[]>` | 完整流年表（自出生年覆盖到最后一步大运结束） |
 | `annualsOfSelectedLuck` | `ComputedRef<AnnualStep[]>` | 选中大运覆盖的流年；未选时给出完整流年表 |
@@ -610,7 +614,7 @@ interface PillarCardProps {
 | `TenGodsPanel` | 展示十神明细与分布；每个干/支可点击选中 | 不得计算五行 |
 | `LuckCyclesTable` | 展示大运表；点击某步 → `store.selectLuck()` | 不得排大运 |
 | `AnnualFortuneTable` | 展示流年（随选中大运过滤） | 不得算流年 |
-| `ShenshaList` | 展示神煞 | 不得查表 |
+| `ShenshaList` | 展示神煞：**主区域随选中柱切换**（带判定依据），下方可展开全盘命中 | 不得查表 |
 | `StepDebug` | 展示 `steps`（含 JSON 复制/下载） | 不得修改 `steps` |
 
 ---
@@ -721,6 +725,64 @@ function formatRegionPath(provinceName: string, cityName: string, countyName: st
 - 坐标取行政区**驻地**坐标（`properties.center`），精度 0.0001°，折合约 10 米，对时差计算绰绰有余。
 - 时区：港澳台分别为 `Asia/Hong_Kong` / `Asia/Macau` / `Asia/Taipei`，其余 `Asia/Shanghai`。
 - 台湾省在数据源中 `childrenNum=0` 且无 `_full.json`，市清单为脚本内置的主要市。
+
+---
+
+## 16. `core/shenshaMore.ts` —— 按柱神煞（扩充版）
+
+> 与 §8 `shensha.ts` 的分工：`shensha.ts` 判五类基础神煞并给出 `hits + flags`；
+> 本模块扩充到二十余类，并回答「某神煞命中在**哪一柱**」，供界面按选中柱展示。
+
+```ts
+/** 一条神煞命中 */
+interface ShenshaRuleHit {
+  name: string
+  /** 判定依据文本，如「年支戌属寅午戌局 → 劫煞在亥（落亥日支）」 */
+  reason: string
+  /** 目标是天干还是地支 */
+  target: 'stem' | 'branch'
+  /** 目标汉字 */
+  targetName: string
+  /** 命中该神煞的柱 */
+  positions: PillarKey[]
+}
+
+/** 每一柱命中的神煞名 */
+type ShenshaByPillar = Record<PillarKey, string[]>
+
+/**
+ * 按柱统计神煞。
+ * 定位规则与取象来源见 [算法说明书 §13.2](bazi-algorithm.md#132-按柱神煞coreshenshamorets)。
+ */
+function shenshaByPillar(
+  pillars: Pillars,
+  dayStemIndex: GanIndex,
+  yearStemIndex: GanIndex,
+): { hits: ShenshaRuleHit[]; byPillar: ShenshaByPillar }
+
+/** 某一柱命中的神煞名（组件直接取用） */
+function shenshaOfPillar(
+  pillars: Pillars,
+  dayStemIndex: GanIndex,
+  yearStemIndex: GanIndex,
+  key: PillarKey,
+): string[]
+```
+
+**收录的神煞（二十余类）**
+
+| 类别 | 神煞 |
+| --- | --- |
+| 贵人 | 天乙贵人、天德贵人、月德贵人、国印贵人 |
+| 三合局取象 | 亡神、劫煞、华盖、将星、驿马、桃花 |
+| 孤寡 | 孤辰、寡宿 |
+| 罗网 | 天罗（戌亥）、地网（辰巳） |
+| 干禄 | 禄神、羊刃 |
+| 童限 | 童子煞 |
+| 日柱本身 | 十恶大败、魁罡、阴差阳错、四废 |
+
+**门派差异**：国印贵人的「庚 → 未」与本项目复核用例一致（通行口诀另有「庚见丑」说）；
+孤辰寡宿、童子煞各家亦不统一。差异集中在文件顶部的常量表，切换门派只需改表。
 
 ---
 
