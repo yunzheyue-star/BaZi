@@ -41,3 +41,6 @@ __screenshots__/
 !.vscode/settings.json
 
 .npm-cache/
+
+# 行政区划数据源的本地缓存（doc/gen_regions.py 生成，可再生）
+doc/.region-cache/

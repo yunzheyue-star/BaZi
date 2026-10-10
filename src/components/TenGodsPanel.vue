@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
- * TenGodsPanel：展示十神与藏干一览。不计算五行、不判十神。
+ * TenGodsPanel：展示十神与藏干一览。
+ *
+ * 每一个天干 / 地支都可点击：点击即把该柱设为「当前选中柱」，
+ * 四柱页的详情面板与神煞列表随之切换（状态在 store，组件不自己算）。
  */
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -8,41 +11,61 @@ import { storeToRefs } from 'pinia'
 import { GAN_COLOR, GAN_WU_XING_BY_NAME } from '../core/constants'
 import type { GanName } from '../core/constants'
 import { useChartStore } from '../stores/chart'
+import type { PillarKey } from '../types/bazi'
 
 const store = useChartStore()
-const { result } = storeToRefs(store)
+const { result, selectedPillar } = storeToRefs(store)
 
-interface Row {
-  label: string
-  stem: string
-  god: string
-  isMaster: boolean
+const PILLAR_KEYS = ['year', 'month', 'day', 'hour'] as const
+const LABELS: Record<PillarKey, { stem: string; branch: string }> = {
+  year: { stem: '年干', branch: '年支' },
+  month: { stem: '月干', branch: '月支' },
+  day: { stem: '日干', branch: '日支' },
+  hour: { stem: '时干', branch: '时支' },
+}
+
+/** 该柱命中的神煞数量（给个提示徽标） */
+function hitCountOf(key: PillarKey): number {
+  const current = result.value
+  if (!current) return 0
+  return current.shensha.hits.filter((hit) => hit.positions.includes(key)).length
+}
+
+function pick(key: PillarKey): void {
+  store.selectPillar(key)
 }
 
 /** 天干十神：年 / 月 / 日 / 时 */
-const stemRows = computed<Row[]>(() => {
+const stemRows = computed(() => {
   const current = result.value
   if (!current) return []
-  return [
-    { label: '年干', stem: current.pillars.year.stem, god: current.tenGods.yearStem, isMaster: false },
-    { label: '月干', stem: current.pillars.month.stem, god: current.tenGods.monthStem, isMaster: false },
-    { label: '日干', stem: current.pillars.day.stem, god: '日主', isMaster: true },
-    { label: '时干', stem: current.pillars.hour.stem, god: current.tenGods.hourStem, isMaster: false },
-  ]
+  const gods: Record<PillarKey, string> = {
+    year: current.tenGods.yearStem,
+    month: current.tenGods.monthStem,
+    day: '日主',
+    hour: current.tenGods.hourStem,
+  }
+  return PILLAR_KEYS.map((key) => ({
+    key,
+    label: LABELS[key].stem,
+    stem: current.pillars[key].stem,
+    god: gods[key],
+    isMaster: key === 'day',
+    hitCount: hitCountOf(key),
+  }))
 })
 
 /** 地支藏干十神 */
 const branchRows = computed(() => {
   const current = result.value
   if (!current) return []
-  const order = ['year', 'month', 'day', 'hour'] as const
-  const labels = { year: '年支', month: '月支', day: '日支', hour: '时支' } as const
-  return order.map((key) => ({
+  return PILLAR_KEYS.map((key) => ({
     key,
-    label: labels[key],
+    label: LABELS[key].branch,
     branch: current.pillars[key].branch,
     stems: current.hiddenStems[key],
     gods: current.tenGods.branches[key],
+    hitCount: hitCountOf(key),
   }))
 })
 
@@ -86,21 +109,45 @@ function wuXingOf(stem: string): string {
 
 <template>
   <section v-if="result" class="card">
-    <h2>十神</h2>
+    <header class="head">
+      <h2>十神</h2>
+      <span class="tip">点击任意天干 / 地支，四柱与神煞同步切换</span>
+    </header>
 
     <h3>天干十神（以日干为「我」）</h3>
     <ul class="stem-list">
-      <li v-for="row in stemRows" :key="row.label" :class="{ master: row.isMaster }">
+      <li
+        v-for="row in stemRows"
+        :key="row.key"
+        class="clickable"
+        :class="{ master: row.isMaster, selected: selectedPillar === row.key }"
+        role="button"
+        tabindex="0"
+        @click="pick(row.key)"
+        @keydown.enter.prevent="pick(row.key)"
+        @keydown.space.prevent="pick(row.key)"
+      >
         <span class="label">{{ row.label }}</span>
         <span class="stem" :style="{ color: colorOf(row.stem) }">{{ row.stem }}</span>
         <span class="wx">{{ wuXingOf(row.stem) }}</span>
         <span class="god">{{ row.god }}</span>
+        <span v-if="row.hitCount > 0" class="badge">{{ row.hitCount }} 神煞</span>
       </li>
     </ul>
 
     <h3>地支藏干十神</h3>
     <ul class="branch-list">
-      <li v-for="row in branchRows" :key="row.key">
+      <li
+        v-for="row in branchRows"
+        :key="row.key"
+        class="clickable"
+        :class="{ selected: selectedPillar === row.key }"
+        role="button"
+        tabindex="0"
+        @click="pick(row.key)"
+        @keydown.enter.prevent="pick(row.key)"
+        @keydown.space.prevent="pick(row.key)"
+      >
         <span class="label">{{ row.label }}（{{ row.branch }}）</span>
         <span class="gods">
           <span v-for="(stem, i) in row.stems" :key="`${stem}-${i}`" class="chip">
@@ -108,6 +155,7 @@ function wuXingOf(stem: string): string {
             {{ row.gods[i] }}
           </span>
         </span>
+        <span v-if="row.hitCount > 0" class="badge">{{ row.hitCount }} 神煞</span>
       </li>
     </ul>
 
@@ -123,6 +171,21 @@ function wuXingOf(stem: string): string {
 </template>
 
 <style scoped>
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.head h2 {
+  margin: 0;
+}
+.tip {
+  font-size: 12px;
+  color: var(--c-muted);
+}
 h3 {
   margin: 18px 0 8px;
   font-size: 13px;
@@ -140,9 +203,22 @@ ul {
   flex-direction: column;
   gap: 6px;
 }
+.clickable {
+  cursor: pointer;
+  transition:
+    outline-color 0.15s,
+    background 0.15s;
+}
+.clickable:hover {
+  outline: 1px solid color-mix(in srgb, var(--c-primary) 55%, transparent);
+}
+.clickable.selected {
+  outline: 2px solid var(--c-primary);
+  background: color-mix(in srgb, var(--c-primary) 10%, var(--c-chip));
+}
 .stem-list li {
   display: grid;
-  grid-template-columns: 56px 32px 40px 1fr;
+  grid-template-columns: 52px 32px 40px 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
@@ -150,8 +226,15 @@ ul {
   background: var(--c-chip);
   font-size: 13px;
 }
-.stem-list li.master {
-  outline: 1px solid var(--c-primary);
+.stem-list li.master .god {
+  color: var(--c-primary);
+}
+.badge {
+  font-size: 11px;
+  color: #b3261e;
+  background: #fdecec;
+  border-radius: 999px;
+  padding: 1px 8px;
 }
 .stem {
   font-size: 20px;
@@ -168,7 +251,7 @@ ul {
 }
 .branch-list li {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: 96px 1fr auto;
   gap: 10px;
   align-items: center;
   font-size: 13px;

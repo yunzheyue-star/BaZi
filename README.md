@@ -30,24 +30,26 @@ src/
 ├── composables/useBazi.ts     # 组合式封装：调用 core，接住中文错误
 ├── core/                      # 纯函数，无 Vue 依赖，可单测
 │   ├── constants.ts           # 天干/地支/藏干/五行/节气/神煞 查表 + 查表函数
+│   ├── regions.ts             # 全国行政区划 省→市→区县 + 经纬度（脚本生成，勿手改）
 │   ├── ganzhi.ts              # 六十甲子、CRT、编码解码、模运算
 │   ├── calendar.ts            # JDN、太阳视黄经、节气时刻、真太阳时、均时差、时区偏移
 │   ├── pillars.ts             # 年柱/月柱/日柱/时柱/换日流派
 │   ├── tenGods.ts             # 十神
-│   ├── luck.ts                # 大运、流年
+│   ├── wuXing.ts              # 五行计数（本气 / 藏干两种口径）
+│   ├── luck.ts                # 大运（含流年覆盖区间）、流年
 │   ├── shensha.ts             # 神煞
 │   └── chart.ts               # 总入口 buildChart(input, options) + steps 中间量
 ├── components/                # 8 个展示组件，均不写算法
-│   ├── BirthForm.vue          # 收集输入 → store.calculate
-│   ├── PillarCard.vue         # 单柱：干支 / 藏干 / 十神
-│   ├── PillarsGrid.vue        # 四柱布局 + 五行计数
-│   ├── TenGodsPanel.vue       # 十神明细与分布
-│   ├── LuckCyclesTable.vue    # 大运表
-│   ├── AnnualFortuneTable.vue # 流年表
+│   ├── BirthForm.vue          # 三级级联选地址 → 写回经纬度；收集输入
+│   ├── PillarCard.vue         # 单柱：干支（天干在上/地支在下）/ 藏干 / 十神，可点击
+│   ├── PillarsGrid.vue        # 四柱布局 + 计时口径切换 + 选中柱详情 + 五行计数
+│   ├── TenGodsPanel.vue       # 十神明细与分布（每个干/支可点选）
+│   ├── LuckCyclesTable.vue    # 大运表（点某步 → 流年切到该步）
+│   ├── AnnualFortuneTable.vue # 流年表（随选中大运过滤）
 │   ├── ShenshaList.vue        # 神煞命中与说明
 │   └── StepDebug.vue          # steps 中间量（含 JSON 复制/下载）
 ├── types/bazi.ts              # 全部类型（索引用字面量联合，禁止 any）
-└── tests/core.test.ts         # core 层单元测试
+└── tests/                     # 单元测试（core / 精度 / 文档算例 / 五行 / 交互）
 ```
 
 ## 算法对应表
@@ -56,7 +58,8 @@ src/
 | --- | --- | --- |
 | 六十甲子 | `i = k mod 10`，`j = k mod 12`（§2.3） | `core/ganzhi.ts` |
 | CRT 反解 | `k = CRT(i, j; 10, 12)`，要求 `i ≡ j (mod 2)` | `core/ganzhi.ts` |
-| 真太阳时 | `T_solar = T_local + (lon − 120°) × 4min + EoT`（§3.1） | `core/calendar.ts` |
+| 真太阳时 | `T_solar = T_local + EoT`（技能 §3.1 的经度项降级为展示） | `core/calendar.ts` |
+| 出生地坐标 | 省 → 市 → 区县 三级级联，取各级驻地坐标 | `core/regions.ts` |
 | 年柱 | `Y* = max{Y : t ≥ 立春(Y)}`，`k_y = (Y* − 4) mod 60`（§3.2） | `core/pillars.ts` |
 | 月柱 | `m = floor(((λ − 315°) mod 360°)/30°) + 1`，`j_m = (m+1) mod 12`，`i_m = (2·i_y + m + 1) mod 10`（§3.3） | `core/pillars.ts` |
 | 日柱 | `k_d = (JDN + 49) mod 60`（§3.4） | `core/pillars.ts` |
@@ -75,12 +78,13 @@ src/
 
    | 口径 | 时柱所用时间 | 偏移（2008-07-16 北京） |
    | --- | --- | --- |
-   | 北京时间 `standard` | 民用钟表时（东经 120° 标准时） | 0 → 10:33 |
-   | 真太阳时 `true_solar` | 北京时间 + 均时差 EoT | −6.1 分 → 10:27 |
+   | 平太阳时 `standard` | 钟表时（东经 120° 标准时，即北京时间） | 0 → 10:33 |
+   | 真太阳时 `true_solar` | 平太阳时 + 均时差 EoT | −6.1 分 → 10:27 |
 
-   **本系统的「平太阳时」就是北京时间**：区时本身就是平太阳时的一种，所以不单列一档。
+   **「平太阳时」与「北京时间」是同一个东西**：区时本身就是平太阳时的一种，所以只有两档。
    出生地经度 `(lon − 120°) × 4` 仅作展示与出生地留痕，**不计入任何一档的修正量**。
-   两个时钟在结果里永远并列给出，UI 会一起显示并标出「时柱采用」的那一档。
+   两个时钟在结果里永远并列给出，UI 并排显示。
+   **切换入口在四柱页**（不在出生信息表单）：点「真太阳时 / 平太阳时」即重排一次。
 
 2. **口径只进时柱，不进日柱。**
    日柱取**民用日**（`k_d = (JDN + 49) mod 60`）；年柱、月柱取出生瞬间（UT 近似）的太阳黄经与节气时刻；
@@ -99,6 +103,38 @@ src/
    同时保留 `startAgeExact` 精确值。
 5. **流年起始年**由 `buildChart(input, { referenceYear })` 注入，`core` 因此保持可复现的纯函数；
    UI 传当前年份，测试传固定年份。
+
+## 界面交互
+
+### 出生地：三级级联选择
+
+```
+省 / 自治区 / 直辖市  →  地级市（或「市辖区」）  →  区县
+```
+
+选中即自动写入**经度 + 纬度 + 时区 + 地名路径**。数据在 `core/regions.ts`
+（**34 省级 / 411 市 / 2792 区县**，由 `doc/gen_regions.py` 从公开行政区划数据生成，勿手改）：
+
+```sh
+<python> doc/gen_regions.py     # 需要联网；带本地缓存 doc/.region-cache
+```
+
+例：湖北省 / 黄石市 / 大冶市 ｜ 湖北省 / 武汉市 / 江夏区 ｜ 广西壮族自治区 / 南宁市 / 青秀区 ｜
+广西壮族自治区 / 崇左市 / 天等县。
+
+层级形态有六种（普通省份 / 直辖市 / 省直辖县级市 / 不设区的地级市 / 港澳 / 台湾省），
+归一化规则与容错见 [接口文档 §16](doc/bazi-api.md#16-coreregionsts--行政区划三级级联)。
+
+### 四柱：可点选 + 口径可切换
+
+- **计时口径切换**在四柱页（不在出生信息表单）：点「真太阳时 / 平太阳时」即重排时柱，
+  两档时钟并排显示便于对照 —— 同一张盘可以自由看两种口径。
+- **四柱全部可点**：点任意一柱 → 下方详情面板显示该柱的干支、天干十神、藏干十神、
+  **该柱命中的神煞**与全盘命中列表。默认选中日柱（日主）。
+- **十神面板每一行也可点**：与四柱共用同一个选中态（存在 store），点哪边另一边同步高亮。
+- **点大运 → 流年跟着切**：大运表点第 1 步「庚申」（8–17 岁 / 2015–2024），
+  流年表立刻只显示 2015–2024；再点一次同一步（或点「显示全部流年」）恢复。
+  各步覆盖区间首尾相接、不重叠（`coveredFromYear[i] === coveredToYear[i−1] + 1`，有测试守着）。
 
 ## 界面版式
 
@@ -152,17 +188,18 @@ src/
 | `src/tests/accuracy.test.ts` | 9 | 节气精度回归（±20 分钟容差）、时区偏移反解、起运天数 |
 | `src/tests/snapshot.test.ts` | 12 | 文档 §16 算例的每个中间量、五行计数、换日流派差异形态 |
 | `src/tests/wuXing.test.ts` | 8 | 五行计数（含 0 土 0 水 回归）、干支遍历、与 buildChart 一致性 |
+| `src/tests/interaction.test.ts` | 14 | 三级行政区划数据与容错、选中柱联动、口径切换、大运↔流年联动 |
 | `src/__tests__/App.spec.ts` | 1 | 页面挂载即出盘 |
 
-合计 **66 项**，`npm run test:unit` 一次跑完。
+合计 **81 项**，`npm run test:unit` 一次跑完。
 `src/tests/*.probe.ts` 是数值探针（无 `.test` 后缀，不参与测试收集）。
 
 ## 文档索引
 
 | 文档 | 内容 |
 | --- | --- |
-| [doc/bazi-api.md](doc/bazi-api.md) | 接口文档：全部导出函数的签名、类型、异常与组件契约 |
-| [doc/bazi-algorithm.md](doc/bazi-algorithm.md) | 算法说明书：公式推导、边界口径、精度实测、完整算例 |
+| [doc/bazi-api.md](doc/bazi-api.md) | 接口文档：全部导出函数的签名、类型、异常、组件契约、行政区划数据 |
+| [doc/bazi-algorithm.md](doc/bazi-algorithm.md) | 算法说明书：公式推导、边界口径、精度实测、完整算例、交互口径 |
 | [doc/bazi-call-graph.md](doc/bazi-call-graph.md) | 调用关系图：分层架构、模块依赖、执行时序、状态流转（9 张 Mermaid 图，已通过解析器校验） |
 
 图表语法自检：`npm install mermaid --no-save --no-package-lock && node mermaid-check.mjs`（脚本本身不参与构建与测试）。

@@ -59,13 +59,20 @@ export function luckCycles(
 ): LuckStep[] {
   const steps: LuckStep[] = []
   const startAge = Math.ceil(startAgeExact)
+  /** 交运年（含小数）→ 本步覆盖的流年整数起年 */
+  const firstYear = Math.round(birthYear + startAgeExact)
 
   for (let n = 1; n <= count; n += 1) {
     const k = mod(monthPillar.k + direction * n, 60) as GanzhiK
     const parts = decodeGanzhi(k)
     const startAgeOfStep = startAge + (n - 1) * LUCK_STEP_YEARS
     const endAgeOfStep = startAgeOfStep + LUCK_STEP_YEARS - 1
-    const startYear = Math.round(birthYear + startAgeExact + (n - 1) * LUCK_STEP_YEARS)
+
+    // 本步覆盖的流年区间：从本步交运年起，到下一步交运年前一年止。
+    // 用「下一步起点 − 1」而非「起点 + 9」，可避免各步交运年取整后出现缝隙或重叠。
+    const coveredFromYear = firstYear + (n - 1) * LUCK_STEP_YEARS
+    const coveredToYear = firstYear + n * LUCK_STEP_YEARS - 1
+
     steps.push({
       n,
       k,
@@ -74,8 +81,11 @@ export function luckCycles(
       branch: parts.branch,
       startAge: startAgeOfStep,
       startAgeExact: Number((startAgeExact + (n - 1) * LUCK_STEP_YEARS).toFixed(2)),
-      startYear,
-      startYearLabel: `${startYear} 年`,
+      startYear: coveredFromYear,
+      startYearLabel: `${coveredFromYear} 年`,
+      coveredFromYear,
+      coveredToYear,
+      coveredLabel: `${coveredFromYear}–${coveredToYear}`,
       ageRange: `${startAgeOfStep}–${endAgeOfStep} 岁`,
     })
   }

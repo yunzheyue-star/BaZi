@@ -9,21 +9,43 @@ import { GAN_COLOR, ZHI_COLOR } from '../core/constants'
 import type { GanName, ZhiName } from '../core/constants'
 import type { Pillar } from '../types/bazi'
 
-const props = defineProps<{
-  label: string
-  pillar: Pillar
-  hiddenStems: string[]
-  hiddenGods: string[]
-  stemTenGod: string
-  isDayMaster?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    label: string
+    pillar: Pillar
+    hiddenStems: string[]
+    hiddenGods: string[]
+    stemTenGod: string
+    isDayMaster?: boolean
+    /** 是否为当前选中柱 */
+    selected?: boolean
+    /** 是否可点击选择 */
+    clickable?: boolean
+  }>(),
+  { isDayMaster: false, selected: false, clickable: false },
+)
+
+const emit = defineEmits<{ select: [] }>()
 
 const stemColor = computed(() => GAN_COLOR[props.pillar.stem as GanName] ?? '#666')
 const branchColor = computed(() => ZHI_COLOR[props.pillar.branch as ZhiName] ?? '#666')
+
+function onClick(): void {
+  if (props.clickable) emit('select')
+}
 </script>
 
 <template>
-  <article class="pillar" :class="{ master: isDayMaster }">
+  <article
+    class="pillar"
+    :class="{ master: isDayMaster, selected, clickable }"
+    :role="clickable ? 'button' : undefined"
+    :tabindex="clickable ? 0 : undefined"
+    :aria-pressed="clickable ? selected : undefined"
+    @click="onClick"
+    @keydown.enter.prevent="onClick"
+    @keydown.space.prevent="onClick"
+  >
     <header>
       <span class="label">{{ label }}</span>
       <span class="k">k={{ pillar.k }}</span>
@@ -64,8 +86,24 @@ const branchColor = computed(() => ZHI_COLOR[props.pillar.branch as ZhiName] ?? 
   min-width: 0;
 }
 .pillar.master {
+  border-color: color-mix(in srgb, var(--c-primary) 45%, var(--c-border));
+}
+/** 可点击：给出手型与悬停反馈 */
+.pillar.clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
+}
+.pillar.clickable:hover {
   border-color: var(--c-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+/** 当前选中：加粗描边 + 外环 */
+.pillar.selected {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 26%, transparent);
 }
 header {
   display: flex;

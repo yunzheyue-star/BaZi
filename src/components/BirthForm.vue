@@ -1,16 +1,19 @@
 <script setup lang="ts">
 /**
  * BirthForm：只收集输入并调用 store.calculate，不含任何算法。
+ *
+ * 出生地为**三级级联选择**（省 → 市 → 区县），选中后自动写入经度、时区与地名。
+ * 计时口径不在这里选 —— 四柱页面可随时切换真太阳时 / 平太阳时（见 PillarsGrid）。
  */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
-import { CITIES, defaultInput, sampleInputA, sampleInputB, useChartStore } from '../stores/chart'
-import type { CityPreset } from '../stores/chart'
-import type { DayBoundary, Gender, TimeStandard } from '../types/bazi'
+import { REGIONS, findCity, findProvince } from '../core/regions'
+import { defaultInput, sampleInputA, sampleInputB, useChartStore } from '../stores/chart'
+import type { DayBoundary, Gender } from '../types/bazi'
 
 const store = useChartStore()
-const { input, error, calculating, result, clockPair } = storeToRefs(store)
+const { input, error, calculating } = storeToRefs(store)
 
 /** datetime-local 需要 "YYYY-MM-DDTHH:mm"，store 里存 "YYYY-MM-DD HH:mm" */
 const localDatetime = computed<string>({
@@ -18,34 +21,96 @@ const localDatetime = computed<string>({
   set: (value: string) => store.patchInput({ birthDatetime: value.replace('T', ' ') }),
 })
 
-/** 城市下拉：选中即写入经度、时区与地名 */
-const city = computed<string>({
-  get: () => {
-    const hit = CITIES.find(
-      (c) => c.longitude === input.value.longitude && c.timezone === input.value.timezone,
-    )
-    return hit ? hit.label : '自定义'
-  },
-  set: (label: string) => {
-    const hit: CityPreset | undefined = CITIES.find((c) => c.label === label)
-    if (hit) {
-      store.patchInput({ longitude: hit.longitude, timezone: hit.timezone, birthPlace: hit.label })
-    } else {
-      store.patchInput({ birthPlace: '' })
-    }
-  },
+/* ------------------------------------------------------------------ *
+ * 三级级联地址
+ * ------------------------------------------------------------------ */
+
+/** 省名列表 */
+const provinceNames = computed(() => REGIONS.map((p) => p.name))
+
+/** 当前省名（「自定义」时为空串） */
+const provinceName = ref('')
+
+/** 当前市名 */
+const cityName = ref('')
+
+/** 当前区县名 */
+const countyName = ref('')
+
+const cityNames = computed<string[]>(() => {
+  const province = findProvince(provinceName.value)
+  return province ? province.cities.map((c) => c.name) : []
 })
 
-/** 计时口径的两档说明（平太阳时即北京时间，故不再单列） */
-const STANDARDS: { value: TimeStandard; label: string; hint: string }[] = [
-  { value: 'standard', label: '北京时间', hint: '钟表时，也就是平太阳时（东经 120° 标准时），不做任何修正' },
-  { value: 'true_solar', label: '真太阳时', hint: '北京时间 + 均时差 EoT，按出生时刻的太阳黄经反解' },
-]
+const countyNames = computed<string[]>(() => {
+  const city = findCity(provinceName.value, cityName.value)
+  return city ? city.counties.map((c) => c.name) : []
+})
 
-/** 当前口径的说明 */
-const standardHint = computed(
-  () => STANDARDS.find((s) => s.value === input.value.timeStandard)?.hint ?? '',
+/** 是否已选到可用的最小单位 */
+const resolved = computed(() => {
+  const city = findCity(provinceName.value, cityName.value)
+  if (!city) return null
+  const county = city.counties.find((c) => c.name === countyName.value)
+  const point = county ?? { name: city.name, longitude: city.longitude, latitude: city.latitude }
+  return { point, city, usedCounty: Boolean(county) }
+})
+
+/** 选中项发生变化 → 写回 store */
+watch(resolved, (value) => {
+  if (!value) return
+  const path = [provinceName.value, cityName.value, value.usedCounty ? countyName.value : '']
+    .filter((part) => part.length > 0)
+    .join(' / ')
+  store.patchInput({
+    longitude: value.point.longitude,
+    birthPlace: path,
+    timezone: findProvince(provinceName.value)?.timezone ?? input.value.timezone,
+  })
+})
+
+/** 省变化 → 重置市与县 */
+watch(provinceName, () => {
+  cityName.value = ''
+  countyName.value = ''
+})
+
+/** 市变化 → 重置县 */
+watch(cityName, () => {
+  countyName.value = ''
+})
+
+/** 从 store 的 birthPlace 反解三级（载入示例或自定义时用） */
+function syncFromInput(): void {
+  const path = input.value.birthPlace ?? ''
+  const parts = path.split('/').map((p) => p.trim())
+  if (parts.length >= 2 && findProvince(parts[0]!)) {
+    provinceName.value = parts[0]!
+    cityName.value = parts[1] ?? ''
+    countyName.value = parts[2] ?? ''
+    return
+  }
+  // 自定义地名：保持经度手填，三级留空
+  provinceName.value = ''
+  cityName.value = ''
+  countyName.value = ''
+}
+
+// 初次挂载与「示例 / 恢复默认 / 清空」后同步
+watch(
+  () => input.value.birthPlace,
+  () => {
+    const current = [provinceName.value, cityName.value, countyName.value]
+      .filter((p) => p.length > 0)
+      .join(' / ')
+    if (current !== (input.value.birthPlace ?? '')) syncFromInput()
+  },
+  { immediate: true },
 )
+
+/* ------------------------------------------------------------------ *
+ * 其余字段
+ * ------------------------------------------------------------------ */
 
 function onGender(value: Gender): void {
   store.patchInput({ gender: value })
@@ -55,16 +120,12 @@ function onDayBoundary(value: DayBoundary): void {
   store.patchInput({ dayBoundary: value })
 }
 
-function onTimeStandard(value: TimeStandard): void {
-  store.patchInput({ timeStandard: value })
-}
-
 function onLongitude(event: Event): void {
   const raw = Number((event.target as HTMLInputElement).value)
   store.patchInput({ longitude: Number.isFinite(raw) ? raw : 0 })
 }
 
-function onBirthPlace(event: Event): void {
+function onCustomPlace(event: Event): void {
   store.patchInput({ birthPlace: (event.target as HTMLInputElement).value })
 }
 
@@ -103,57 +164,7 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
         </div>
       </div>
 
-      <label class="field">
-        <span>出生地（选城市自动填经度）</span>
-        <select v-model="city">
-          <option v-for="item in CITIES" :key="item.label" :value="item.label">
-            {{ item.label }}
-          </option>
-          <option value="自定义">自定义</option>
-        </select>
-      </label>
-
-      <label class="field">
-        <span>出生地名称（可选）</span>
-        <input
-          :value="input.birthPlace ?? ''"
-          type="text"
-          placeholder="如：北京市海淀区"
-          @input="onBirthPlace"
-        />
-      </label>
-
-      <label class="field">
-        <span>经度（东经为正 · 仅作出生地留痕与经度时差展示）</span>
-        <input :value="input.longitude" type="number" step="0.01" min="-180" max="180" @input="onLongitude" />
-      </label>
-
-      <label class="field">
-        <span>时区</span>
-        <input v-model="input.timezone" type="text" list="tz-list" placeholder="Asia/Shanghai" />
-        <datalist id="tz-list">
-          <option v-for="item in CITIES" :key="item.timezone" :value="item.timezone" />
-        </datalist>
-      </label>
-
-      <div class="field span-2">
-        <span>计时口径（决定时柱用哪个时间）</span>
-        <div class="segmented wide">
-          <button
-            v-for="item in STANDARDS"
-            :key="item.value"
-            type="button"
-            :class="{ active: input.timeStandard === item.value }"
-            :title="item.hint"
-            @click="onTimeStandard(item.value)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-        <p class="hint">{{ standardHint }}</p>
-      </div>
-
-      <div class="field span-2">
+      <div class="field">
         <span>换日流派</span>
         <div class="segmented wide">
           <button
@@ -172,19 +183,55 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
           </button>
         </div>
       </div>
-    </div>
 
-    <div v-if="result" class="clocks">
-      <div
-        v-for="item in clockPair"
-        :key="item.key"
-        class="clock"
-        :class="{ used: item.key === input.timeStandard }"
-      >
-        <span class="clock-label">{{ item.label }}</span>
-        <span class="clock-value">{{ item.clock }}</span>
-        <span v-if="item.key === input.timeStandard" class="clock-tag">时柱采用</span>
+      <div class="field span-2">
+        <span>出生地（省 → 市 → 区县，选中后自动取经纬度）</span>
+        <div class="cascade">
+          <select v-model="provinceName" aria-label="省">
+            <option value="">请选择省 / 自治区 / 直辖市</option>
+            <option v-for="name in provinceNames" :key="name" :value="name">{{ name }}</option>
+          </select>
+          <select v-model="cityName" :disabled="!provinceName" aria-label="市">
+            <option value="">{{ provinceName ? '请选择市' : '—' }}</option>
+            <option v-for="name in cityNames" :key="name" :value="name">{{ name }}</option>
+          </select>
+          <select
+            v-model="countyName"
+            :disabled="!cityName || countyNames.length === 0"
+            aria-label="区县"
+          >
+            <option value="">
+              {{ !cityName ? '—' : countyNames.length === 0 ? '（该市无需选区县）' : '请选择区县' }}
+            </option>
+            <option v-for="name in countyNames" :key="name" :value="name">{{ name }}</option>
+          </select>
+        </div>
+        <p v-if="resolved" class="hint">
+          已定位：{{ input.birthPlace }} · 经度 {{ resolved.point.longitude }}° ·
+          纬度 {{ resolved.point.latitude }}° · 时区 {{ input.timezone }}
+          <template v-if="!resolved.usedCounty">（该市不设区县，取市级驻地坐标）</template>
+        </p>
       </div>
+
+      <label class="field">
+        <span>经度（东经为正 · 选地址自动填入，可手改）</span>
+        <input :value="input.longitude" type="number" step="0.01" min="-180" max="180" @input="onLongitude" />
+      </label>
+
+      <label class="field">
+        <span>时区</span>
+        <input v-model="input.timezone" type="text" placeholder="Asia/Shanghai" />
+      </label>
+
+      <label class="field span-2">
+        <span>出生地名称（留痕用 · 可直接手填自定义地名）</span>
+        <input
+          :value="input.birthPlace ?? ''"
+          type="text"
+          placeholder="如：湖北省 / 武汉市 / 江夏区"
+          @input="onCustomPlace"
+        />
+      </label>
     </div>
 
     <div class="actions">
@@ -233,6 +280,15 @@ select {
   font-size: 14px;
   font-family: inherit;
 }
+select:disabled {
+  opacity: 0.5;
+}
+/** 三级级联：三等分一行 */
+.cascade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
 .segmented {
   display: inline-flex;
   border: 1px solid var(--c-border);
@@ -258,54 +314,10 @@ select {
   background: var(--c-primary);
   color: #fff;
 }
-.field.dim {
-  opacity: 0.55;
-}
 .hint {
   margin: 0;
   font-size: 12px;
   color: var(--c-muted);
-}
-/** 两档时钟对照 */
-.clocks {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--c-border);
-}
-.clock {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--c-chip);
-  border: 1px solid transparent;
-}
-.clock.used {
-  border-color: var(--c-primary);
-  background: color-mix(in srgb, var(--c-primary) 12%, transparent);
-}
-.clock-label {
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.clock-value {
-  font-size: 18px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.clock-tag {
-  font-size: 11px;
-  color: var(--c-primary);
-  font-weight: 600;
-}
-.checkbox {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
 }
 .actions {
   display: flex;
@@ -349,7 +361,7 @@ select {
   .span-2 {
     grid-column: span 1;
   }
-  .clocks {
+  .cascade {
     grid-template-columns: minmax(0, 1fr);
   }
 }

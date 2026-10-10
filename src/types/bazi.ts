@@ -37,18 +37,18 @@ export type DayBoundary = 'midnight' | 'zi_hour'
 /**
  * 计时口径（两档，决定时柱用哪个时间）
  *
- * 本系统的「平太阳时」就是**北京时间**（东经 120° 标准时，即钟表时）：
- * 民用钟表时本身就是平太阳时的一种（区时），所以不再单独拆一档。
+ * 本系统的「平太阳时」就是**北京时间**（东经 120° 标准时，即民用钟表时）：
+ * 区时本身就是平太阳时的一种，所以平太阳时这一档的展示名就叫「平太阳时」。
  *
- * - `true_solar` 真太阳时：北京时间 + 均时差 EoT（由出生时刻的太阳黄经反解）
- * - `standard`   北京时间：不做任何时差修正，直接用钟表时
+ * - `standard`   平太阳时：不做任何时差修正，直接用钟表时（北京时间）
+ * - `true_solar` 真太阳时：平太阳时 + 均时差 EoT（由出生时刻的太阳黄经反解）
  */
 export type TimeStandard = 'true_solar' | 'standard'
 
 /** 各计时口径的展示名 */
 export const TIME_STANDARD_LABEL: Record<TimeStandard, string> = {
   true_solar: '真太阳时',
-  standard: '北京时间（平太阳时）',
+  standard: '平太阳时',
 }
 
 /** 大运顺逆 */
@@ -182,6 +182,12 @@ export interface LuckStep {
   /** 交运公历年（可含小数） */
   startYear: number
   startYearLabel: string
+  /** 本步覆盖的流年起始年（含） */
+  coveredFromYear: number
+  /** 本步覆盖的流年结束年（含），= 下一步起始年 − 1 */
+  coveredToYear: number
+  /** 本步覆盖的流年区间文本，如 "2015–2024" */
+  coveredLabel: string
   /** 该步覆盖的年龄区间文本，如 "8–17 岁" */
   ageRange: string
 }

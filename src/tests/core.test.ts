@@ -142,7 +142,7 @@ describe('技能 §6 参考盘（2008 例的中间量与派生结果）', () => 
 
     expect(standard.trueSolarTime.deltaMinutes).toBe(0)
     expect([standard.trueSolarTime.hour, standard.trueSolarTime.minute]).toEqual([10, 33])
-    expect(standard.trueSolarTime.standardLabel).toBe('北京时间（平太阳时）')
+    expect(standard.trueSolarTime.standardLabel).toBe('平太阳时')
     expect(trueSolar.trueSolarTime.deltaMinutes).toBeCloseTo(-6.08, 2)
     expect(trueSolar.trueSolarTime.standardLabel).toBe('真太阳时')
 
@@ -441,7 +441,7 @@ describe('chart：steps 顺序与内容', () => {
     )
     expect(standard.bazi).toBe('己卯 丙子 戊午 壬子')
     expect(standard.trueSolarTime.deltaMinutes).toBe(0)
-    expect(standard.trueSolarTime.standardLabel).toBe('北京时间（平太阳时）')
+    expect(standard.trueSolarTime.standardLabel).toBe('平太阳时')
     // 真太阳时口径下 00:00 + EoT(−2.86) = 23:57，仍是子时；日柱也不变（日柱取民用日）
     const trueSolar = buildChart(
       input({ birthDatetime: '2000-01-01 00:00', timeStandard: 'true_solar' }),

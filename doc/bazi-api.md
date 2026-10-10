@@ -57,7 +57,7 @@ interface ChartInput {
   birthDatetime: string        // "YYYY-MM-DD HH:mm"，**当地钟表时间**
   gender: Gender
   longitude: number            // 出生地经度，东经为正，范围 [-180, 180]
-  birthPlace?: string          // 出生地名称（可选，仅展示与导出留痕）
+  birthPlace?: string          // 出生地：「省 / 市 / 区县」路径，或自定义地名
   timezone: string             // IANA 名，如 "Asia/Shanghai"
   dayBoundary: DayBoundary     // 换日流派
   timeStandard: TimeStandard   // 计时口径：决定时柱用哪个时间
@@ -68,14 +68,19 @@ interface ChartInput {
 
 | 取值 | 展示名 | 时柱所用时间 | 偏移量 `deltaMinutes` |
 | --- | --- | --- | --- |
-| `standard` | 北京时间（平太阳时） | 民用钟表时（东经 120° 标准时） | 恒为 `0` |
-| `true_solar` | 真太阳时 | 北京时间 + 均时差 `EoT` | `EoT` |
+| `standard` | 平太阳时 | 民用钟表时（东经 120° 标准时，即北京时间） | 恒为 `0` |
+| `true_solar` | 真太阳时 | 平太阳时 + 均时差 `EoT` | `EoT` |
 
-**注意**：本系统的「平太阳时」就是**北京时间**——区时本身就是平太阳时的一种，
-所以不再单列一档。出生地经度只作展示与留痕（`longitudeDeltaMinutes`），
+**注意**：「平太阳时」与「北京时间」在本系统里是同一个东西——区时本身就是平太阳时的一种，
+所以只有两档，展示名统一用「平太阳时」。出生地经度只作展示与留痕（`longitudeDeltaMinutes`），
 **不计入任何一档的修正量**。
 
-两档都只影响**时柱**；日柱取民用日，年柱月柱取出生瞬间的太阳黄经与节气时刻（详见 [算法说明书 §14.1](bazi-algorithm.md#141-计时口径只进时柱不进日柱-)）。
+两档都只影响**时柱**；日柱取民用日，年柱月柱取出生瞬间的太阳黄经与节气时刻
+（详见 [算法说明书 §14.1](bazi-algorithm.md#141-计时口径只进时柱不进日柱-)）。
+
+**口径在哪里切换**：`BirthForm` 不再提供口径选择（参考盘按真太阳时口径校验）。
+切换入口在**四柱页** —— `PillarsGrid` 调 `store.setTimeStandard()`，点击即重排时柱，
+两档时钟并列显示便于对照。这是「点一下即时看真 / 平太阳时」的唯一入口。
 
 ### 1.4 结果
 
@@ -135,6 +140,9 @@ interface LuckStep {
   startAge: number         // 进位岁数（不足一年算一年）
   startAgeExact: number    // 精确岁数（小数）
   startYear: number; startYearLabel: string
+  coveredFromYear: number  // 本步覆盖的流年起始年（含）
+  coveredToYear: number    // 本步覆盖的流年结束年（含）= 下一步起点 − 1
+  coveredLabel: string     // "2015–2024"
   ageRange: string         // "8–17 岁"
 }
 
@@ -487,7 +495,7 @@ function stemIndexesOf(result: ChartResult): GanIndex[]
 | 2 | `yearPillar` | 出生 UT 儒略日、本年立春时刻与儒略日、命理年、`k_y/i_y/j_y`、阴阳 |
 | 3 | `monthPillar` | λ、节起始黄经、月令、节名、节内度数、节后天数与 `k_m/i_m/j_m` |
 | 4 | `dayPillar` | 换日流派、所用民用日、JDN、`k_d/i_d/j_d` |
-| 5 | `hourPillar` | 真太阳时小时、时辰名、`k_h/i_h/j_h` |
+| 5 | `hourPillar` | 口径时钟的小时、时辰名、`k_h/i_h/j_h` |
 | 6 | `tenGods` | 日干、四柱天干十神、藏干、地支十神 |
 | 7 | `luckCycles` | 顺逆与理由、距节天数、起运精确/进位岁、交运年、前三步 |
 
@@ -518,15 +526,15 @@ function useBazi(initial?: ChartInput): UseBaziReturn
 ### 11.1 导出
 
 ```ts
-const CITIES: readonly CityPreset[]        // 15 个常用城市
-interface CityPreset { label: string; longitude: number; timezone: string }
-
-const defaultInput: ChartInput             // 2008-07-16 10:33 男，116.4，Asia/Shanghai
+const defaultInput: ChartInput             // 2008-07-16 10:33 男，湖北省/武汉市/江夏区
 const sampleInputA: ChartInput             // 校验用例一
 const sampleInputB: ChartInput             // 校验用例二
 
 function useChartStore(): ChartStore
 ```
+
+> 出生地预设城市表 `CITIES` 已移除 —— 地址改由 `core/regions.ts` 的三级级联数据提供
+> （见 §17），不再维护第二份城市清单。
 
 ### 11.2 Store 成员
 
@@ -544,13 +552,28 @@ function useChartStore(): ChartStore
 | `wuXingTotal` | `ComputedRef<number>` | 本气视图合计（恒为 8） |
 | `luckDirectionLabel` | `ComputedRef<string>` | 顺排 / 逆排（取自 `steps`，不重算） |
 | `trueSolarLabel` | `ComputedRef<string>` | 时柱所用时间文本，如 `真太阳时 10:27（−6.1 分）` |
-| `clockPair` | `ComputedRef<{key, label, clock}[]>` | 两档对照：北京时间（平太阳时）/ 真太阳时 |
+| `clockPair` | `ComputedRef<{key, label, clock}[]>` | 两档对照：平太阳时 / 真太阳时 |
+| `selectedPillar` | `Ref<PillarKey>` | 当前选中柱，默认 `'day'`（日主） |
+| `selectedTenGodKey` | `Ref<PillarKey>` | 十神面板联动的选中柱 |
+| `selectedLuckN` | `Ref<number \| null>` | 当前选中大运步序，`null` = 未选（流年显示全部） |
+| `selectedPillarDetail` | `ComputedRef<... \| null>` | 选中柱详情：干支、天干十神、藏干十神、**该柱命中的神煞**、全盘命中 |
+| `selectedLuck` | `ComputedRef<LuckStep \| null>` | 选中大运步（未选时取第一步，供高亮/展示） |
+| `fullAnnualFortunes` | `ComputedRef<AnnualStep[]>` | 完整流年表（自出生年覆盖到最后一步大运结束） |
+| `annualsOfSelectedLuck` | `ComputedRef<AnnualStep[]>` | 选中大运覆盖的流年；未选时给出完整流年表 |
+| `isPillarSelected(key)` | `(key: PillarKey) => boolean` | 是否选中某柱 |
+| `selectPillar(key)` | `(key: PillarKey) => void` | 选中柱，并联动 `selectedTenGodKey` |
+| `selectLuck(n)` | `(n: number) => void` | 选中大运步；再次点同一步则取消（切换语义） |
+| `setTimeStandard(v)` | `(v: TimeStandard) => void` | 切换计时口径并**立即重排**（四柱页的切换入口） |
 | `calculate()` | `() => void` | 调 `buildChart({...input}, { referenceYear: 当前年 })` |
 | `applyInput(next)` | `(next: ChartInput) => void` | 整体替换输入并立即排盘 |
 | `patchInput(patch)` | `(patch: Partial<ChartInput>) => void` | 局部更新输入 |
-| `reset()` | `() => void` | 恢复默认并清空结果 |
+| `reset()` | `() => void` | 恢复默认、清空结果与三个选中项 |
 | `exportJson()` | `() => string` | 完整结果 JSON（含 steps），无结果返回 `''` |
 | `exportText()` | `() => string` | 文本摘要，无结果返回 `''` |
+
+> **`fullAnnualFortunes` 为什么在 store 里再排一次**：`buildChart` 按技能约定只排 10 年流年，
+> 但「点大运看该步流年」需要覆盖到第 10 步（约 100 年）。这里以 `referenceYear = 出生年`
+> 调用纯函数 `annualFortunes()` 重排一次 —— 不读系统时钟，结果可复现。
 
 ---
 
@@ -568,22 +591,25 @@ interface PillarCardProps {
   hiddenStems: string[]    // 藏干汉字（由父组件传入，本组件不查表）
   hiddenGods: string[]     // 藏干十神（由父组件传入，本组件不判十神）
   stemTenGod: string       // 天干十神
-  isDayMaster?: boolean    // 高亮日柱
+  isDayMaster?: boolean    // 高亮日主
+  selected?: boolean       // 是否为当前选中柱
+  clickable?: boolean      // 是否可点击选择
 }
+// emits: select —— 点击 / 回车 / 空格 时触发（仅 clickable 为 true 时）
 ```
 
-其余 7 个组件（`BirthForm` / `PillarsGrid` / `TenGodsPanel` / `LuckCyclesTable` / `AnnualFortuneTable` / `ShenshaList` / `StepDebug`）**无 props、无 emits**：一律通过 `useChartStore()` + `storeToRefs()` 取数，保证单一数据源。
+其余 7 个组件（`BirthForm` / `PillarsGrid` / `TenGodsPanel` / `LuckCyclesTable` / `AnnualFortuneTable` / `ShenshaList` / `StepDebug`）**无 props、无 emits**：一律通过 `useChartStore()` + `storeToRefs()` 取数，保证单一数据源。选中态（柱 / 十神 / 大运）同样由 store 持有，因此**四柱页与十神页的选中项天然同步**。
 
 ### 12.2 职责边界
 
 | 组件 | 职责 | 禁止 |
 | --- | --- | --- |
-| `BirthForm` | 收集输入 → `store.calculate()` | 不得写算法 |
-| `PillarCard` | 展示单柱干支、藏干、十神 | 不得计算十神 |
-| `PillarsGrid` | 四柱布局 + 五行计数条 | 不得访问 `core` |
-| `TenGodsPanel` | 展示十神明细与分布 | 不得计算五行 |
-| `LuckCyclesTable` | 展示大运表 | 不得排大运 |
-| `AnnualFortuneTable` | 展示流年 | 不得算流年 |
+| `BirthForm` | 三级级联选地址 → 写回经纬度时区；收集其余输入 → `store.calculate()` | 不得写算法 |
+| `PillarCard` | 展示单柱干支、藏干、十神；可点击发 `select` | 不得计算十神 |
+| `PillarsGrid` | 四柱布局 + **计时口径切换** + 选中柱详情 + 五行计数条 | 不得访问 `core` 算法（仅调 store action） |
+| `TenGodsPanel` | 展示十神明细与分布；每个干/支可点击选中 | 不得计算五行 |
+| `LuckCyclesTable` | 展示大运表；点击某步 → `store.selectLuck()` | 不得排大运 |
+| `AnnualFortuneTable` | 展示流年（随选中大运过滤） | 不得算流年 |
 | `ShenshaList` | 展示神煞 | 不得查表 |
 | `StepDebug` | 展示 `steps`（含 JSON 复制/下载） | 不得修改 `steps` |
 
@@ -645,7 +671,60 @@ function wuXingPercents(tally: CountWuXing): CountWuXing
 
 ---
 
-## 16. 相关文档
+## 16. `core/regions.ts` —— 行政区划（三级级联）
+
+> **本文件由脚本生成**：`doc/gen_regions.py`，数据源为阿里云 DataV 行政区划公开 GeoJSON。
+> 规模：34 省级 / 411 市 / 2792 区县，约 260 KB。生成脚本自带对账（每级数量与 `childrenNum` 一致）。
+
+```ts
+interface County { name: string; longitude: number; latitude: number }
+interface City { name: string; longitude: number; latitude: number; counties: County[] }
+interface Province { name: string; timezone: string; cities: City[] }
+
+/** 全部省 / 自治区 / 直辖市 / 特别行政区 */
+const REGIONS: readonly Province[]
+
+/** 按省名取省份 */
+function findProvince(name: string): Province | undefined
+
+/** 按省名 + 市名取市 */
+function findCity(provinceName: string, cityName: string): City | undefined
+
+/** 按省 / 市 / 区县名取区县 */
+function findCounty(provinceName: string, cityName: string, countyName: string): County | undefined
+
+/**
+ * 解析三级地址 → 精确坐标与所属时区。
+ * 容错：区县留空（如台湾省只选到市）时回退为市级驻地坐标。
+ */
+function resolveRegion(
+  provinceName: string,
+  cityName: string,
+  countyName: string,
+): { county: County; timezone: string } | undefined
+
+/** 地址展示文本：省 / 市 / 区县（缺级自动省略） */
+function formatRegionPath(provinceName: string, cityName: string, countyName: string): string
+```
+
+**数据结构约定**
+
+| 情形 | 层级形态 | 例子 |
+| --- | --- | --- |
+| 普通省份 | 省 → 地级市 → 区县 | 湖北省 / 武汉市 / 江夏区 |
+| 直辖市 | 省 → 「市辖区」→ 区 | 北京市 / 市辖区 / 东城区 |
+| 省直辖县级行政区划 | 省 → 县级市（**自身即区县**） | 河南省 / 济源市 / 济源市 |
+| 不设区的地级市 | 省 → 市（**自身即区县**） | 广东省 / 东莞市 / 东莞市 |
+| 港澳 | 省 → 区（**区即城市级**，无下级） | 香港特别行政区 / 中西区 / 中西区 |
+| 台湾省 | 省 → 市（**无区县层级**） | 台湾省 / 台北市 |
+
+- 坐标取行政区**驻地**坐标（`properties.center`），精度 0.0001°，折合约 10 米，对时差计算绰绰有余。
+- 时区：港澳台分别为 `Asia/Hong_Kong` / `Asia/Macau` / `Asia/Taipei`，其余 `Asia/Shanghai`。
+- 台湾省在数据源中 `childrenNum=0` 且无 `_full.json`，市清单为脚本内置的主要市。
+
+---
+
+## 17. 相关文档
 
 - [排盘算法说明书](./bazi-algorithm.md) —— 数学模型、公式推导、口径与精度
 - [调用关系图](./bazi-call-graph.md) —— 模块依赖、执行链路、Mermaid 图

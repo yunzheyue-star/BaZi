@@ -1,6 +1,10 @@
 <script setup lang="ts">
 /**
- * PillarsGrid：四柱布局。数据全部由 store 的 pillarList 提供，本组件不访问 core。
+ * PillarsGrid：四柱布局 + 计时口径切换 + 选中柱详情。
+ *
+ * 数据全部由 store 的 pillarList / selectedPillarDetail 提供，本组件不访问 core 算法。
+ * 唯一"非展示"的动作是调用 store.setTimeStandard()（重排一次）——
+ * 因为口径切换本身就要求重算时柱，放在这里才能做到"点一下即时看真/平太阳时"。
  */
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -9,9 +13,11 @@ import PillarCard from './PillarCard.vue'
 import { WU_XING_COLOR } from '../core/constants'
 import type { WuXingName } from '../core/constants'
 import { useChartStore } from '../stores/chart'
+import type { PillarKey, TimeStandard } from '../types/bazi'
 
 const store = useChartStore()
-const { result, pillarList, clockPair } = storeToRefs(store)
+const { result, pillarList, clockPair, selectedPillar, selectedPillarDetail, input } =
+  storeToRefs(store)
 
 /** 地支十神按柱位取 */
 const godsOf = computed(() => {
@@ -49,6 +55,20 @@ const activeRows = computed(() => (showHidden.value ? wuXingRowsAll.value : wuXi
 
 /** 当前视图的计数合计（本气视图恒为 8；藏干视图更大） */
 const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + row.count, 0))
+
+/** 计时口径切换项 */
+const CLOCKS: { value: TimeStandard; label: string; note: string }[] = [
+  { value: 'true_solar', label: '真太阳时', note: '平太阳时 + 均时差 EoT' },
+  { value: 'standard', label: '平太阳时', note: '钟表时（北京时间），不做修正' },
+]
+
+function onPickPillar(key: PillarKey): void {
+  store.selectPillar(key)
+}
+
+function onPickClock(value: TimeStandard): void {
+  store.setTimeStandard(value)
+}
 </script>
 
 <template>
@@ -60,7 +80,7 @@ const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + r
       </div>
       <dl class="meta">
         <div>
-          <dt>时辰所用（{{ result.trueSolarTime.standardLabel }}）</dt>
+          <dt>时柱所用（{{ result.trueSolarTime.standardLabel }}）</dt>
           <dd>{{ store.trueSolarLabel }}</dd>
         </div>
         <div>
@@ -74,15 +94,31 @@ const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + r
       </dl>
     </header>
 
-    <div class="clocks">
-      <div
-        v-for="item in clockPair"
-        :key="item.key"
-        class="clock"
-        :class="{ used: item.key === result.trueSolarTime.standard }"
-      >
-        <span class="clock-label">{{ item.label }}</span>
-        <span class="clock-value">{{ item.clock }}</span>
+    <!-- 计时口径：点一下即时重排时柱，两档自由对照 -->
+    <div class="clock-switch">
+      <span class="switch-label">计时口径</span>
+      <div class="segmented">
+        <button
+          v-for="item in CLOCKS"
+          :key="item.value"
+          type="button"
+          :class="{ active: input.timeStandard === item.value }"
+          :title="item.note"
+          @click="onPickClock(item.value)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
+      <div class="clocks">
+        <div
+          v-for="item in clockPair"
+          :key="item.key"
+          class="clock"
+          :class="{ used: item.key === input.timeStandard }"
+        >
+          <span class="clock-label">{{ item.label }}</span>
+          <span class="clock-value">{{ item.clock }}</span>
+        </div>
       </div>
     </div>
 
@@ -96,7 +132,76 @@ const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + r
         :hidden-gods="godsOf[item.key] ?? []"
         :stem-ten-god="item.stemTenGod"
         :is-day-master="item.key === 'day'"
+        :selected="selectedPillar === item.key"
+        clickable
+        @select="onPickPillar(item.key)"
       />
+    </div>
+
+    <!-- 选中柱详情：十神 + 神煞 -->
+    <div v-if="selectedPillarDetail" class="detail">
+      <header class="detail-head">
+        <h3>
+          {{ selectedPillarDetail.label }}详情 ·
+          <span class="detail-ganzhi">{{ selectedPillarDetail.pillar.ganzhi }}</span>
+        </h3>
+        <span class="detail-hint">点击上方任意柱切换</span>
+      </header>
+
+      <div class="detail-body">
+        <dl class="detail-list">
+          <div>
+            <dt>天干</dt>
+            <dd>
+              {{ selectedPillarDetail.pillar.stem }}
+              <span class="god">{{ selectedPillarDetail.stemTenGod }}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>地支</dt>
+            <dd>
+              {{ selectedPillarDetail.pillar.branch }}
+              <span class="muted">（{{ selectedPillarDetail.pillar.branchIndex }}）</span>
+            </dd>
+          </div>
+          <div>
+            <dt>藏干十神</dt>
+            <dd class="chips">
+              <span
+                v-for="(stem, i) in selectedPillarDetail.hiddenStems"
+                :key="`${stem}-${i}`"
+                class="chip"
+              >
+                <b>{{ stem }}</b>
+                {{ selectedPillarDetail.hiddenGods[i] }}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt>六十甲子序号</dt>
+            <dd class="muted">k = {{ selectedPillarDetail.pillar.k }}</dd>
+          </div>
+        </dl>
+
+        <div class="detail-shensha">
+          <h4>本柱神煞</h4>
+          <ul v-if="selectedPillarDetail.shensha.length > 0" class="hits">
+            <li v-for="hit in selectedPillarDetail.shensha" :key="hit.name">
+              <b>{{ hit.name }}</b>
+              <span class="branches">{{ hit.branches.join(' · ') }}</span>
+              <span class="reason">{{ hit.reason }}</span>
+            </li>
+          </ul>
+          <p v-else class="empty">本柱未命中神煞。</p>
+
+          <h4 v-if="selectedPillarDetail.allShensha.length > 0">全盘命中（共 {{ selectedPillarDetail.allShensha.length }} 项）</h4>
+          <ul v-if="selectedPillarDetail.allShensha.length > 0" class="all">
+            <li v-for="hit in selectedPillarDetail.allShensha" :key="hit.name">
+              {{ hit.name }} <span class="muted">{{ hit.positions.length }} 处</span>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
 
     <div class="balance">
@@ -150,26 +255,55 @@ const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + r
   margin: 4px 0 0;
   font-weight: 600;
 }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+/** 计时口径切换条 */
+.clock-switch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
-}
-/** 三种时钟对照条：标出时柱实际采用的那一档 */
-.clocks {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  padding: 10px 12px;
   margin-bottom: 16px;
+  border-radius: 10px;
+  background: var(--c-chip);
+}
+.switch-label {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.segmented button {
+  border: 0;
+  padding: 6px 14px;
+  background: var(--c-input);
+  color: var(--c-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+.segmented button.active {
+  background: var(--c-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.clocks {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-width: 260px;
 }
 .clock {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--c-chip);
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--c-card);
   border: 1px solid transparent;
 }
 .clock.used {
@@ -181,9 +315,136 @@ const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + r
   color: var(--c-muted);
 }
 .clock-value {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+/** 选中柱详情 */
+.detail {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-chip);
+}
+.detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.detail h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.detail-ganzhi {
+  font-family: 'Songti SC', 'SimSun', serif;
+  font-size: 18px;
+}
+.detail-hint {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+.detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-list > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 8px;
+  font-size: 13px;
+  align-items: baseline;
+}
+.detail-list dt {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.detail-list dd {
+  margin: 0;
+}
+.detail-list .god {
+  margin-left: 6px;
+  font-weight: 600;
+  color: var(--c-primary);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  font-size: 12px;
+}
+.chip b {
+  font-family: 'Songti SC', 'SimSun', serif;
+}
+.detail-shensha h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--c-muted);
+  font-weight: 600;
+}
+.detail-shensha h4 + h4 {
+  margin-top: 12px;
+}
+.hits,
+.all {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hits li {
+  display: grid;
+  grid-template-columns: 72px 80px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--c-card);
+}
+.all li {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--c-card);
+}
+.branches {
+  font-family: 'Songti SC', 'SimSun', serif;
+}
+.reason {
+  color: var(--c-muted);
+}
+.empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.muted {
+  color: var(--c-muted);
 }
 .balance {
   margin-top: 18px;
@@ -241,19 +502,16 @@ const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + r
   text-align: right;
   color: var(--c-muted);
 }
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .clocks {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .detail-body {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 520px) {
   .grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .clocks {
     grid-template-columns: minmax(0, 1fr);
   }
 }

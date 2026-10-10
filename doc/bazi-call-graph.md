@@ -51,6 +51,8 @@ flowchart TD
         K6["tenGods.ts"]
         K7["luck.ts"]
         K8["shensha.ts"]
+        K9["wuXing.ts"]
+        K10["regions.ts<br/>行政区划数据（脚本生成）"]
     end
 
     subgraph L1["类型层 · types/"]
@@ -66,9 +68,12 @@ flowchart TD
     C6 --> S1
     C7 --> S1
     C8 --> S1
+    C1 --> K10
 
     S1 --> K1
     S1 --> K5
+    S1 --> K9
+    S1 --> K7
     H1 --> K1
 
     K1 --> K2
@@ -87,6 +92,8 @@ flowchart TD
     K7 --> K5
     K7 --> K6
     K8 --> K5
+    K9 --> K5
+    K9 --> K4
 
     K1 -.-> T1
     K2 -.-> T1
@@ -95,14 +102,18 @@ flowchart TD
     K6 -.-> T1
     K7 -.-> T1
     K8 -.-> T1
+    K9 -.-> T1
     S1 -.-> T1
 
-    K5 -.->|"唯一被展示层直连的 core 模块<br/>（只取颜色与汉字表）"| C3
+    K5 -.->|"展示层直连的 core 模块（只取颜色与汉字表）"| C3
+    K10 -.->|"展示层直连：三级级联地址数据"| C1
 
     classDef pure fill:#e8f2ff,stroke:#3a6fbf,color:#12305c
+    classDef data fill:#f3e8ff,stroke:#7c3aed,color:#2e1065
     classDef state fill:#fff4e5,stroke:#a9762f,color:#4a2f0b
     classDef view fill:#eefaf1,stroke:#2f9e6f,color:#0d3a22
-    class K1,K2,K3,K4,K5,K6,K7,K8 pure
+    class K1,K2,K3,K4,K5,K6,K7,K8,K9 pure
+    class K10 data
     class S1,H1 state
     class C0,C1,C2,C3,C4,C5,C6,C7,C8 view
 ```
@@ -132,6 +143,7 @@ flowchart LR
     luck["luck.ts<br/>大运 / 流年"]
     shensha["shensha.ts<br/>神煞"]
     wuXing["wuXing.ts<br/>五行计数"]
+    regions["regions.ts<br/>行政区划（脚本生成）"]
     types["types/bazi.ts"]
 
     chart --> pillars
@@ -143,6 +155,7 @@ flowchart LR
     chart --> shensha
     wuXing --> constants
     wuXing --> ganzhi
+    regions --> types
     pillars --> calendar
     pillars --> ganzhi
     tenGods --> ganzhi
@@ -176,6 +189,8 @@ flowchart LR
 - `luck.ts → tenGods.ts` 是为了给流年补十神标注，方向是单向的，`tenGods` 不知道 `luck` 存在。
 - `wuXing.ts` 只依赖 `constants`（五行归属表）与 `ganzhi`（藏干查表），与 `chart.ts` 平级：
   它是**独立可测的派生计算**，由 store 直接调用，不经过 `buildChart`（五行不进 `ChartResult`）。
+- `regions.ts` 是**纯数据模块**（脚本生成的行政区划表），不依赖任何同层模块，只导出类型。
+  它与 `constants.ts` 的区别：`constants` 是命理常量（天干地支等），`regions` 是地理数据。
 - **无环**：任意两模块之间不存在双向依赖。
 
 ---
@@ -211,7 +226,7 @@ sequenceDiagram
     CH->>CA: trueSolarCorrection(civilUt, longitude, 120)
     CA->>CA: equationOfTime(jd) ← solarApparentLongitude(jd)
     CA-->>CH: { longitudeDelta, eot, delta }
-    CH->>CH: 北京时间 = 民用钟表时（= 平太阳时，不修正）
+    CH->>CH: 平太阳时 = 民用钟表时（北京时间，不修正）
     CH->>CH: 真太阳时 = 北京时间 + 均时差
     CH->>CH: 按 input.timeStandard 选一个给时柱
 
@@ -299,7 +314,7 @@ flowchart LR
     C --> D["birthJdUt<br/>2454663.60"]
     B --> E["julianDay − offset<br/>→ civilUt"]
     E --> F["trueSolarCorrection<br/>经度时差 −14.4（仅展示）/ EoT −6.08"]
-    F --> G0["北京时间（平太阳时）10:33"]
+    F --> G0["平太阳时（北京时间）10:33"]
     F --> G2["真太阳时 10:27"]
     G0 --> G{"input.timeStandard<br/>挑选时柱所用时间"}
     G2 --> G
@@ -431,20 +446,26 @@ flowchart TD
 
     PG --> PC["PillarCard ×4"]
 
-    STORE[("useChartStore<br/>input / result / error")]
+    STORE[("useChartStore | input / result / error + 三个选中态")]
 
-    BF -->|"calculate() / patchInput()"| STORE
-    BF -->|"CITIES / sampleInputA/B"| STORE
-    PG -->|"result / pillarList / wuXingCount / trueSolarLabel"| STORE
-    TGP -->|"result.tenGods"| STORE
+    BF -->|"三级级联 → patchInput(longitude/timezone/birthPlace)"| STORE
+    BF -->|"calculate() / sampleInputA/B"| STORE
+    PG -->|"result / pillarList / wuXingCount / clockPair"| STORE
+    PG -->|"selectPillar() / setTimeStandard()"| STORE
+    TGP -->|"result.tenGods / selectedPillar"| STORE
+    TGP -->|"selectPillar()"| STORE
     SL -->|"result.shensha"| STORE
-    LCT -->|"result.luckCycles + luckCycles step"| STORE
-    AFT -->|"result.annualFortunes"| STORE
+    LCT -->|"result.luckCycles / selectedLuckN"| STORE
+    LCT -->|"selectLuck()"| STORE
+    AFT -->|"annualsOfSelectedLuck / selectedLuck"| STORE
     SD -->|"result.steps / exportJson()"| STORE
-    PC -->|"props：pillar / hiddenStems / hiddenGods / stemTenGod"| PG
+    PC -->|"props：pillar / … / selected / clickable"| PG
     PC -->|"仅取颜色与汉字表"| CONST["core/constants.ts"]
+    BF -->|"REGIONS / resolveRegion"| REG["core/regions.ts"]
 
-    STORE -->|"buildChart()"| CORE["core/chart.ts"]
+    STORE -->|"buildChart()（含 setTimeStandard 重新排盘）"| CORE["core/chart.ts"]
+    STORE -->|"annualFortunes()（完整流年表）"| LUCK["core/luck.ts"]
+    STORE -->|"countWuXingMajor / countWuXingAll"| WX["core/wuXing.ts"]
 
     classDef ui fill:#eefaf1,stroke:#2f9e6f,color:#0d3a22
     classDef data fill:#fff4e5,stroke:#a9762f,color:#4a2f0b
@@ -453,7 +474,13 @@ flowchart TD
 ```
 
 **数据流方向**：组件 →（action）→ store →（纯函数）→ core →（返回值）→ store →（响应式）→ 组件。
-没有任何组件直接调 `core` 的算法函数，也没有组件之间互相传业务数据（只有 `PillarCard` 的 props 下传）。
+没有任何组件直接调 `core` 的算法函数；组件之间只下传展示 props（`PillarCard` 收 `PillarsGrid` 的 props）。
+
+**两个"展示层直连 core"的例外，都是纯数据/纯查表**：`PillarCard` ← `constants.ts`（五行颜色），
+`BirthForm` ← `regions.ts`（行政区划三级数据）。算法调用一律经 store。
+
+**跨组件选中态统一放 store**：`selectedPillar` / `selectedTenGodKey` / `selectedLuckN`。
+因此四柱页、十神页、大运页、流年页四处的高亮与过滤天然同步，不需要组件间通信。
 
 ---
 
@@ -490,9 +517,10 @@ stateDiagram-v2
 
 | 方向 | 例子 |
 | --- | --- |
-| `components` → `stores` | `BirthForm` 调 `store.calculate()` |
+| `components` → `stores` | `BirthForm` 调 `store.calculate()`；`PillarsGrid` 调 `setTimeStandard()` |
 | `components` → `core/constants` | `PillarCard` 取五行颜色（纯查表） |
-| `stores` → `core` | `chart.ts` 调 `buildChart()` |
+| `components` → `core/regions` | `BirthForm` 取三级行政区划（纯数据） |
+| `stores` → `core` | `chart.ts` 调 `buildChart()` / `annualFortunes()` / `countWuXingMajor()` |
 | `composables` → `core` | `useBazi.run()` 调 `buildChart()` |
 | `core` 内部向下 | `chart` → `pillars` → `ganzhi` → `constants` |
 
@@ -527,11 +555,11 @@ flowchart LR
 flowchart TB
     subgraph 输入
         I1["出生时间 · 性别 · 出生地经度 · 时区"]
-        I2["换日流派 · 计时口径（北京时间 / 真太阳时）"]
+        I2["换日流派 · 计时口径（平太阳时 / 真太阳时）"]
     end
     subgraph 时钟
-        C0["北京时间 = 民用钟表时<br/>（平太阳时，不修正）"]
-        C2["真太阳时 = 北京时间 + 均时差"]
+        C0["平太阳时 = 民用钟表时<br/>（＝北京时间，不修正）"]
+        C2["真太阳时 = 平太阳时 + 均时差"]
     end
     subgraph 天文
         A1["太阳视黄经 λ"]
