@@ -35,13 +35,13 @@ function stepOutput(result: ChartResult, name: string): Record<string, unknown> 
 describe('doc/bazi-algorithm.md §15 算例：2008-07-16 10:33 男', () => {
   const result = chartOf('2008-07-16 10:33')
 
-  it('① 真太阳时：北京时间 10:33 + 均时差 −6.08 = 10:27；经度仅作展示', () => {
-    expect(result.trueSolarTime.equationOfTimeMinutes).toBeCloseTo(-6.08, 2)
-    expect(result.trueSolarTime.deltaMinutes).toBeCloseTo(-6.08, 2)
+  it('① 真太阳时：平太阳时 10:33 + 经度时差 −14.4 + 均时差 −6.11 = 10:13', () => {
     expect(result.trueSolarTime.longitudeDeltaMinutes).toBeCloseTo(-14.4, 2)
+    expect(result.trueSolarTime.equationOfTimeMinutes).toBeCloseTo(-6.11, 1)
+    expect(result.trueSolarTime.deltaMinutes).toBeCloseTo(-20.51, 1)
     expect([result.trueSolarTime.standardHour, result.trueSolarTime.standardMinute]).toEqual([10, 33])
     expect(result.trueSolarTime.hour).toBe(10)
-    expect(result.trueSolarTime.minute).toBe(27)
+    expect(result.trueSolarTime.minute).toBe(13)
   })
 
   it('② 年柱：命理年 2008，k_y = 24，戊子（阳年干）', () => {

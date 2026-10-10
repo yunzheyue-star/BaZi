@@ -69,11 +69,11 @@ interface ChartInput {
 | 取值 | 展示名 | 时柱所用时间 | 偏移量 `deltaMinutes` |
 | --- | --- | --- | --- |
 | `standard` | 平太阳时 | 民用钟表时（东经 120° 标准时，即北京时间） | 恒为 `0` |
-| `true_solar` | 真太阳时 | 平太阳时 + 均时差 `EoT` | `EoT` |
+| `true_solar` | 真太阳时 | 平太阳时 + 经度时差 + 均时差 `EoT` | `(lon − 120°) × 4 + EoT` |
 
 **注意**：「平太阳时」与「北京时间」在本系统里是同一个东西——区时本身就是平太阳时的一种，
-所以只有两档，展示名统一用「平太阳时」。出生地经度只作展示与留痕（`longitudeDeltaMinutes`），
-**不计入任何一档的修正量**。
+所以只有两档，展示名统一用「平太阳时」。经度时差 `(lon − 120°) × 4` 是**真太阳时的必需项**
+（钟表时 → 地方时的换算），不是可选项。
 
 两档都只影响**时柱**；日柱取民用日，年柱月柱取出生瞬间的太阳黄经与节气时刻
 （详见 [算法说明书 §14.1](bazi-algorithm.md#141-计时口径只进时柱不进日柱-)）。
@@ -109,9 +109,9 @@ interface TrueSolarTimeInfo {
   localHour: number; localMinute: number// 本地民用钟表时
   standard: TimeStandard                // 本次采用的口径
   standardLabel: string                 // "真太阳时" / "北京时间（平太阳时）"
-  longitudeDeltaMinutes: number         // (lon − 120) × 4，仅作展示与留痕，不计入修正
-  equationOfTimeMinutes: number         // 均时差（仅 true_solar 档计入合计）
-  deltaMinutes: number                  // 合计偏移；standard 档为 0，true_solar 档为 EoT
+  longitudeDeltaMinutes: number         // (lon − 120) × 4，真太阳时的经度时差项
+  equationOfTimeMinutes: number         // 均时差（按出生地平太阳时求值）
+  deltaMinutes: number                  // 合计偏移；standard 档为 0，true_solar 档为 经度时差 + EoT
   // 两档时钟并列（无论选哪档都给出，供 UI 对照）
   standardHour: number; standardMinute: number        // 北京时间（= 民用钟表时 = 平太阳时）
   trueSolarHour: number; trueSolarMinute: number      // 真太阳时 = 北京时间 + EoT
@@ -551,7 +551,7 @@ function useChartStore(): ChartStore
 | `wuXingCountAll` | `ComputedRef<CountWuXing>` | 五行计数：天干 + 地支**全部藏干**（合计 > 8） |
 | `wuXingTotal` | `ComputedRef<number>` | 本气视图合计（恒为 8） |
 | `luckDirectionLabel` | `ComputedRef<string>` | 顺排 / 逆排（取自 `steps`，不重算） |
-| `trueSolarLabel` | `ComputedRef<string>` | 时柱所用时间文本，如 `真太阳时 10:27（−6.1 分）` |
+| `trueSolarLabel` | `ComputedRef<string>` | 时柱所用时间文本，如 `真太阳时 10:13（−20.5 分）` |
 | `clockPair` | `ComputedRef<{key, label, clock}[]>` | 两档对照：平太阳时 / 真太阳时 |
 | `selectedPillar` | `Ref<PillarKey>` | 当前选中柱，默认 `'day'`（日主） |
 | `selectedTenGodKey` | `Ref<PillarKey>` | 十神面板联动的选中柱 |

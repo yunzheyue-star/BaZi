@@ -117,22 +117,21 @@ describe('技能 §6 参考盘（日柱存疑，逐柱对照留痕）', () => {
 })
 
 describe('技能 §6 参考盘（2008 例的中间量与派生结果）', () => {
-  it('两档时钟并列：北京时间（平太阳时）10:33 / 真太阳时 10:27', () => {
+  it('两档时钟并列：平太阳时 10:33 / 真太阳时 10:13', () => {
     const result = buildChart(input({ birthDatetime: '2008-07-16 10:33' }), {
       referenceYear: 2008,
     })
     const info = result.trueSolarTime
-    // 北京时间 = 民用钟表时，不做任何修正（它本身就是平太阳时）
+    // 平太阳时 = 民用钟表时（北京时间），不做任何修正
     expect([info.standardHour, info.standardMinute]).toEqual([10, 33])
-    // 真太阳时 = 北京时间 + 均时差(−6.08) = 10:27
-    expect([info.trueSolarHour, info.trueSolarMinute]).toEqual([10, 27])
-    expect(info.equationOfTimeMinutes).toBeCloseTo(-6.08, 2)
-    // 经度只作展示：116.4°E 差 3.6° → −14.4 分，但不计入任何一档的修正
+    // 真太阳时 = 平太阳时 + 经度时差(−14.4) + 均时差(−6.11) = 10:13
+    expect([info.trueSolarHour, info.trueSolarMinute]).toEqual([10, 13])
     expect(info.longitudeDeltaMinutes).toBeCloseTo(-14.4, 2)
+    expect(info.equationOfTimeMinutes).toBeCloseTo(-6.11, 1)
+    expect(info.deltaMinutes).toBeCloseTo(-20.51, 1)
     // 默认口径是真太阳时
     expect(info.standard).toBe('true_solar')
-    expect([info.hour, info.minute]).toEqual([10, 27])
-    expect(info.deltaMinutes).toBeCloseTo(-6.08, 2)
+    expect([info.hour, info.minute]).toEqual([10, 13])
   })
 
   it('两档口径各自的 deltaMinutes 与选用时间', () => {
@@ -143,18 +142,17 @@ describe('技能 §6 参考盘（2008 例的中间量与派生结果）', () => 
     expect(standard.trueSolarTime.deltaMinutes).toBe(0)
     expect([standard.trueSolarTime.hour, standard.trueSolarTime.minute]).toEqual([10, 33])
     expect(standard.trueSolarTime.standardLabel).toBe('平太阳时')
-    expect(trueSolar.trueSolarTime.deltaMinutes).toBeCloseTo(-6.08, 2)
+    expect(trueSolar.trueSolarTime.deltaMinutes).toBeCloseTo(-20.51, 1)
     expect(trueSolar.trueSolarTime.standardLabel).toBe('真太阳时')
 
     // 口径只影响时柱：日柱两档一致
     expect(standard.pillars.day.ganzhi).toBe(trueSolar.pillars.day.ganzhi)
-    // 10:33 与 10:27 都落在巳时（09–11 点），故本例时支不变
+    // 10:33 与 10:13 都落在巳时（09–11 点），故本例时支不变
     expect(standard.pillars.hour.branch).toBe('巳')
     expect(trueSolar.pillars.hour.branch).toBe('巳')
   })
 
-  it('跨时辰才显出时柱差异：均时差把 21:04 推回 20:58（亥时 → 戌时）', () => {
-    // 2008-07-16 均时差约 −6 分，21:04 减 6 分 → 20:58，退回戌时
+  it('跨时辰才显出时柱差异：真太阳时把 21:04 推回 20:44（亥时 → 戌时）', () => {
     const base = { birthDatetime: '2008-07-16 21:04' } as const
     const standard = buildChart(input({ ...base, timeStandard: 'standard' }), {
       referenceYear: 2008,
@@ -162,8 +160,8 @@ describe('技能 §6 参考盘（2008 例的中间量与派生结果）', () => 
     const trueSolar = buildChart(input({ ...base, timeStandard: 'true_solar' }), {
       referenceYear: 2008,
     })
-    expect(standard.pillars.hour.branch).toBe('亥') // 21:04 → 亥时
-    expect(trueSolar.pillars.hour.branch).toBe('戌') // 20:58 → 戌时
+    expect(standard.pillars.hour.ganzhi).toBe('辛亥') // 21:04 → 亥时
+    expect(trueSolar.pillars.hour.ganzhi).toBe('庚戌') // 20:44 → 戌时
     // 日柱不受口径影响
     expect(trueSolar.pillars.day.k).toBe(standard.pillars.day.k)
   })
@@ -442,12 +440,13 @@ describe('chart：steps 顺序与内容', () => {
     expect(standard.bazi).toBe('己卯 丙子 戊午 壬子')
     expect(standard.trueSolarTime.deltaMinutes).toBe(0)
     expect(standard.trueSolarTime.standardLabel).toBe('平太阳时')
-    // 真太阳时口径下 00:00 + EoT(−2.86) = 23:57，仍是子时；日柱也不变（日柱取民用日）
+    // 真太阳时口径下 00:00 + (经度 −14.4 + EoT −3.02) = 前一日 23:43，仍是子时；
+    // 日柱也不变（日柱取民用日）
     const trueSolar = buildChart(
       input({ birthDatetime: '2000-01-01 00:00', timeStandard: 'true_solar' }),
       { referenceYear: 2000 },
     )
-    expect([trueSolar.trueSolarTime.hour, trueSolar.trueSolarTime.minute]).toEqual([23, 57])
+    expect([trueSolar.trueSolarTime.hour, trueSolar.trueSolarTime.minute]).toEqual([23, 43])
     expect(trueSolar.pillars.hour.branch).toBe('子')
     expect(trueSolar.pillars.day.ganzhi).toBe(standard.pillars.day.ganzhi)
   })

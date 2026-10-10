@@ -57,8 +57,8 @@ PILLARS = [
 ]
 
 CLOCKS = [
-    {"label": "北京时间（平太阳时）", "value": "10:33", "used": True},
-    {"label": "真太阳时", "value": "10:27", "used": False},
+    {"label": "平太阳时", "value": "10:33", "used": True},
+    {"label": "真太阳时", "value": "10:13", "used": False},
 ]
 
 
@@ -92,7 +92,7 @@ d.text((44, 34), "四柱", font=f_title, fill=TEXT)
 d.text((44, 62), "戊子 己未 丁巳 乙巳", font=f_bazi, fill=TEXT)
 
 d.text((W - 400, 34), "时辰所用（真太阳时）", font=f_small, fill=MUTED)
-d.text((W - 400, 50), "真太阳时 10:27（−6.1 分）", font=f_hidden_meta, fill=TEXT)
+d.text((W - 400, 50), "真太阳时 10:13（−20.5 分）", font=f_hidden_meta, fill=TEXT)
 d.text((W - 190, 34), "节气", font=f_small, fill=MUTED)
 d.text((W - 190, 50), "小暑 · 月令 6", font=f_hidden_meta, fill=TEXT)
 

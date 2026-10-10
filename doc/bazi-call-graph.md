@@ -227,7 +227,7 @@ sequenceDiagram
     CA->>CA: equationOfTime(jd) ← solarApparentLongitude(jd)
     CA-->>CH: { longitudeDelta, eot, delta }
     CH->>CH: 平太阳时 = 民用钟表时（北京时间，不修正）
-    CH->>CH: 真太阳时 = 北京时间 + 均时差
+    CH->>CH: 真太阳时 = 平太阳时 + 经度时差 + 均时差
     CH->>CH: 按 input.timeStandard 选一个给时柱
 
     Note over CH: ② 年柱（立春为界）
@@ -313,9 +313,9 @@ flowchart LR
     B --> C["timezoneOffsetMinutes<br/>+480 min"]
     C --> D["birthJdUt<br/>2454663.60"]
     B --> E["julianDay − offset<br/>→ civilUt"]
-    E --> F["trueSolarCorrection<br/>经度时差 −14.4（仅展示）/ EoT −6.08"]
+    E --> F["trueSolarCorrection<br/>经度时差 −14.4 + EoT −6.11 = −20.51"]
     F --> G0["平太阳时（北京时间）10:33"]
-    F --> G2["真太阳时 10:27"]
+    F --> G2["真太阳时 10:13"]
     G0 --> G{"input.timeStandard<br/>挑选时柱所用时间"}
     G2 --> G
 

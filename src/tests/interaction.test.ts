@@ -151,7 +151,7 @@ describe('store：计时口径切换', () => {
     const store = freshStore()
     expect(store.input.timeStandard).toBe('true_solar')
     expect(store.result?.trueSolarTime.standardLabel).toBe('真太阳时')
-    expect(store.result?.trueSolarTime.trueSolarMinute).toBe(27)
+    expect(store.result?.trueSolarTime.trueSolarMinute).toBe(13)
 
     store.setTimeStandard('standard')
     expect(store.input.timeStandard).toBe('standard')
@@ -159,7 +159,7 @@ describe('store：计时口径切换', () => {
     expect(store.result?.trueSolarTime.deltaMinutes).toBe(0)
     // 两档时钟仍并列给出，便于对照
     expect(store.result?.trueSolarTime.standardMinute).toBe(33)
-    expect(store.result?.trueSolarTime.trueSolarMinute).toBe(27)
+    expect(store.result?.trueSolarTime.trueSolarMinute).toBe(13)
     // 日柱不受口径影响
     expect(store.result?.pillars.day.ganzhi).toBe('丁巳')
   })

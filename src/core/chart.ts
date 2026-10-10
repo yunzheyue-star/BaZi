@@ -175,18 +175,29 @@ export function buildChart(input: ChartInput, options: BuildChartOptions = {}): 
   const birthJdUt = civilJdLocal - tzOffsetMinutes / 1440
   const civilUt: CivilDateTime = fromJulianDay(birthJdUt)
 
-  // 两档时钟：
-  //   北京时间 = 民用钟表时（东经 120° 标准时，本身即平太阳时，不做任何修正）
-  //   真太阳时 = 北京时间 + 均时差 EoT（由出生时刻的太阳黄经反解）
-  // 出生地经度只用于展示经度时差，不再计入修正量。
-  // 注意：日柱与节气/年柱判定都不使用这两个值（口径见 README「流派与口径」）
-  const correction = trueSolarCorrection(civilUt, input.longitude, STANDARD_MERIDIAN)
+  // 两档时钟（口径见 doc/bazi-algorithm.md §4）：
+  //   平太阳时 = 民用钟表时（北京时间，东经 120° 标准时）              ← 不做任何修正
+  //   真太阳时 = 平太阳时 + 经度时差 + 均时差 EoT
+  //             经度时差 = (lon − 120°) × 4，均时差由太阳视黄经反解
+  //
+  // 【历史 bug 留痕】曾一度把经度时差从修正量里摘掉（只加 EoT），
+  // 导致天等县（107.14°E）这类远离标准经线的出生地真太阳时整体偏晚 51 分钟、
+  // 时柱跨错一个时辰（应甲辰而算成乙巳）。
+  //
+  // 均时差取**出生地平太阳时**那一刻的值（即本地钟表时），而不是同一瞬间的 UT：
+  // 「真太阳时 = 平太阳时 + EoT」这条式子里，EoT 的参考系是当地的平太阳时。
+  // 两者相差约 ±0.3 分钟，但既然是定义问题，就按定义来。
+  const correction = trueSolarCorrection(civil, input.longitude, STANDARD_MERIDIAN)
   const standardClock = { hour: civil.hour, minute: civil.minute }
-  const trueSolarClock = addMinutes(standardClock, correction.equationOfTimeMinutes)
+  const meanSolarClock = addMinutes(standardClock, correction.longitudeDeltaMinutes)
+  const trueSolarClock = addMinutes(meanSolarClock, correction.equationOfTimeMinutes)
 
   const standard = input.timeStandard
   const usedClock = standard === 'true_solar' ? trueSolarClock : standardClock
-  const hourDeltaMinutes = standard === 'true_solar' ? correction.equationOfTimeMinutes : 0
+  const hourDeltaMinutes =
+    standard === 'true_solar'
+      ? correction.longitudeDeltaMinutes + correction.equationOfTimeMinutes
+      : 0
   const solarHour = usedClock.hour
   const solarMinute = usedClock.minute
 
@@ -208,23 +219,24 @@ export function buildChart(input: ChartInput, options: BuildChartOptions = {}): 
 
   steps.push({
     name: 'trueSolarTime',
-    formula: '真太阳时 = 北京时间 + EoT；北京时间 = 民用钟表时（平太阳时，不修正）',
+    formula:
+      '平太阳时 = 民用钟表时（北京时间，东经 120° 标准时）；真太阳时 = 平太阳时 + (lon − 120°)×4min + EoT',
     inputs: {
       birthDatetime: input.birthDatetime,
       birthPlace: input.birthPlace ?? '（未填）',
       longitude: input.longitude,
-      longitudeNote: '仅作展示与出生地留痕，不计入任何一档的修正量',
+      standardMeridian: STANDARD_MERIDIAN,
       timezone: input.timezone,
       utcOffsetMinutes: tzOffsetMinutes,
       timeStandard: `${standard}（${TIME_STANDARD_LABEL[standard]}）`,
-      eotEvaluatedAtUt: formatCivil(civilUt),
+      eotEvaluatedAt: `${formatCivil(civil)} 地方平太阳时`,
     },
     output: {
       civilTime: formatCivil(civil),
-      '北京时间（平太阳时）': `${pad2(standardClock.hour)}:${pad2(standardClock.minute)}`,
-      真太阳时: `${pad2(trueSolarClock.hour)}:${pad2(trueSolarClock.minute)}`,
+      平太阳时: `${pad2(standardClock.hour)}:${pad2(standardClock.minute)}`,
       经度时差分钟: trueSolarTimeInfo.longitudeDeltaMinutes,
       均时差分钟: trueSolarTimeInfo.equationOfTimeMinutes,
+      真太阳时: `${pad2(trueSolarClock.hour)}:${pad2(trueSolarClock.minute)}`,
       采用口径: TIME_STANDARD_LABEL[standard],
       采用偏移分钟: trueSolarTimeInfo.deltaMinutes,
       时柱所用时间: `${pad2(solarHour)}:${pad2(solarMinute)}`,
