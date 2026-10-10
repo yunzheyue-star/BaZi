@@ -30,6 +30,7 @@
     "oxfmt": "^0.67.0",
     "typescript": "npm:typescript-native-bridge@latest",
     "vite": "^8.2.2",
+    "vite-plugin-singlefile": "^2.3.3",
     "vite-plugin-vue-devtools": "^8.2.1",
     "vitest": "^4.1.11",
     "vue-tsc": "^3.3.11"
