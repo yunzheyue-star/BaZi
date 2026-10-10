@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildChart } from '../core/chart'
+import { countWuXingMajor } from '../core/wuXing'
 import type { ChartResult } from '../types/bazi'
 
 /**
@@ -34,12 +35,13 @@ function stepOutput(result: ChartResult, name: string): Record<string, unknown> 
 describe('doc/bazi-algorithm.md §15 算例：2008-07-16 10:33 男', () => {
   const result = chartOf('2008-07-16 10:33')
 
-  it('① 真太阳时：经度时差 −14.4，均时差 ≈ −6.08，合计 ≈ −20.48，真太阳时 10:13', () => {
-    expect(result.trueSolarTime.longitudeDeltaMinutes).toBe(-14.4)
+  it('① 真太阳时：北京时间 10:33 + 均时差 −6.08 = 10:27；经度仅作展示', () => {
     expect(result.trueSolarTime.equationOfTimeMinutes).toBeCloseTo(-6.08, 2)
-    expect(result.trueSolarTime.deltaMinutes).toBeCloseTo(-20.48, 2)
+    expect(result.trueSolarTime.deltaMinutes).toBeCloseTo(-6.08, 2)
+    expect(result.trueSolarTime.longitudeDeltaMinutes).toBeCloseTo(-14.4, 2)
+    expect([result.trueSolarTime.standardHour, result.trueSolarTime.standardMinute]).toEqual([10, 33])
     expect(result.trueSolarTime.hour).toBe(10)
-    expect(result.trueSolarTime.minute).toBe(13)
+    expect(result.trueSolarTime.minute).toBe(27)
   })
 
   it('② 年柱：命理年 2008，k_y = 24，戊子（阳年干）', () => {
@@ -147,6 +149,10 @@ describe('doc/bazi-algorithm.md §15 算例：2008-07-16 10:33 男', () => {
       'tenGods',
       'luckCycles',
     ])
+  })
+
+  it('⑪ 五行计数（天干 + 地支本气）与文档一致：木1 火3 土3 金0 水1', () => {
+    expect(countWuXingMajor(result.pillars)).toEqual({ 木: 1, 火: 3, 土: 3, 金: 0, 水: 1 })
   })
 })
 

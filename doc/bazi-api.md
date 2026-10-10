@@ -31,7 +31,7 @@ type YinYang = 0 | 1                           // 0 阳 1 阴
 type PillarKey = 'year' | 'month' | 'day' | 'hour'
 type Gender = 'male' | 'female'
 type DayBoundary = 'midnight' | 'zi_hour'
-type TimeStandard = 'true_solar' | 'mean_solar' | 'standard'
+type TimeStandard = 'true_solar' | 'standard'
 type LuckDirection = 1 | -1
 ```
 
@@ -64,15 +64,18 @@ interface ChartInput {
 }
 ```
 
-**`TimeStandard` 三档语义**
+**`TimeStandard` 两档语义**
 
 | 取值 | 展示名 | 时柱所用时间 | 偏移量 `deltaMinutes` |
 | --- | --- | --- | --- |
-| `standard` | 北京时间 | 民用钟表时（东经 120° 标准时） | 恒为 `0` |
-| `mean_solar` | 平太阳时 | 民用时 + 经度时差 `(lon − 120°) × 4` | 经度时差 |
-| `true_solar` | 真太阳时 | 平太阳时 + 均时差 `EoT` | 经度时差 + 均时差 |
+| `standard` | 北京时间（平太阳时） | 民用钟表时（东经 120° 标准时） | 恒为 `0` |
+| `true_solar` | 真太阳时 | 北京时间 + 均时差 `EoT` | `EoT` |
 
-三档都只影响**时柱**；日柱取民用日，年柱月柱取出生瞬间的太阳黄经与节气时刻（详见 [算法说明书 §13.1](bazi-algorithm.md#131-真太阳时只进时柱不进日柱-)）。
+**注意**：本系统的「平太阳时」就是**北京时间**——区时本身就是平太阳时的一种，
+所以不再单列一档。出生地经度只作展示与留痕（`longitudeDeltaMinutes`），
+**不计入任何一档的修正量**。
+
+两档都只影响**时柱**；日柱取民用日，年柱月柱取出生瞬间的太阳黄经与节气时刻（详见 [算法说明书 §14.1](bazi-algorithm.md#141-计时口径只进时柱不进日柱-)）。
 
 ### 1.4 结果
 
@@ -100,14 +103,13 @@ interface TrueSolarTimeInfo {
   hour: number; minute: number          // 时柱所用的时间（按口径选出的那个）
   localHour: number; localMinute: number// 本地民用钟表时
   standard: TimeStandard                // 本次采用的口径
-  standardLabel: string                 // "真太阳时" / "平太阳时" / "北京时间"
-  longitudeDeltaMinutes: number         // (lon − 120) × 4
-  equationOfTimeMinutes: number         // 均时差（仅 true_solar 计入合计）
-  deltaMinutes: number                  // 合计偏移；standard 档为 0
-  // 三种时钟并列（无论选哪档都给出，供 UI 对照）
-  standardHour: number; standardMinute: number        // 北京时间
-  meanSolarHour: number; meanSolarMinute: number      // 出生地平太阳时
-  trueSolarHour: number; trueSolarMinute: number      // 出生地真太阳时
+  standardLabel: string                 // "真太阳时" / "北京时间（平太阳时）"
+  longitudeDeltaMinutes: number         // (lon − 120) × 4，仅作展示与留痕，不计入修正
+  equationOfTimeMinutes: number         // 均时差（仅 true_solar 档计入合计）
+  deltaMinutes: number                  // 合计偏移；standard 档为 0，true_solar 档为 EoT
+  // 两档时钟并列（无论选哪档都给出，供 UI 对照）
+  standardHour: number; standardMinute: number        // 北京时间（= 民用钟表时 = 平太阳时）
+  trueSolarHour: number; trueSolarMinute: number      // 真太阳时 = 北京时间 + EoT
 }
 
 interface SolarTermInfo {
@@ -481,7 +483,7 @@ function stemIndexesOf(result: ChartResult): GanIndex[]
 
 | # | `name` | 记录的中间量 |
 | --- | --- | --- |
-| 1 | `trueSolarTime` | 出生地、经度、时区、口径，以及北京时间 / 平太阳时 / 真太阳时三个时钟与选用结果 |
+| 1 | `trueSolarTime` | 出生地、经度、时区、口径，以及北京时间（平太阳时）/ 真太阳时两个时钟与选用结果 |
 | 2 | `yearPillar` | 出生 UT 儒略日、本年立春时刻与儒略日、命理年、`k_y/i_y/j_y`、阴阳 |
 | 3 | `monthPillar` | λ、节起始黄经、月令、节名、节内度数、节后天数与 `k_m/i_m/j_m` |
 | 4 | `dayPillar` | 换日流派、所用民用日、JDN、`k_d/i_d/j_d` |
@@ -537,10 +539,12 @@ function useChartStore(): ChartStore
 | `hasResult` | `ComputedRef<boolean>` | 是否已有结果 |
 | `bazi` | `ComputedRef<string>` | 四柱简写 |
 | `pillarList` | `ComputedRef<PillarView[]>` | 分柱视图（年 月 日 时，含藏干与十神） |
-| `wuXingCount` | `ComputedRef<Record<WuXingName, number>>` | 五行计数（天干 + 地支本气） |
+| `wuXingCount` | `ComputedRef<CountWuXing>` | 五行计数：天干 + 地支**本气**，各计 1（合计 8） |
+| `wuXingCountAll` | `ComputedRef<CountWuXing>` | 五行计数：天干 + 地支**全部藏干**（合计 > 8） |
+| `wuXingTotal` | `ComputedRef<number>` | 本气视图合计（恒为 8） |
 | `luckDirectionLabel` | `ComputedRef<string>` | 顺排 / 逆排（取自 `steps`，不重算） |
-| `trueSolarLabel` | `ComputedRef<string>` | 时柱所用时间文本，如 `真太阳时 10:13（−20.5 分）` |
-| `clockTriplet` | `ComputedRef<{key, label, clock}[]>` | 北京时间 / 平太阳时 / 真太阳时 三档对照 |
+| `trueSolarLabel` | `ComputedRef<string>` | 时柱所用时间文本，如 `真太阳时 10:27（−6.1 分）` |
+| `clockPair` | `ComputedRef<{key, label, clock}[]>` | 两档对照：北京时间（平太阳时）/ 真太阳时 |
 | `calculate()` | `() => void` | 调 `buildChart({...input}, { referenceYear: 当前年 })` |
 | `applyInput(next)` | `(next: ChartInput) => void` | 整体替换输入并立即排盘 |
 | `patchInput(patch)` | `(patch: Partial<ChartInput>) => void` | 局部更新输入 |
@@ -599,7 +603,49 @@ UI 侧：`buildChart` 的异常在 `useBazi.run()` / `store.calculate()` 内被�
 
 ---
 
-## 14. 相关文档
+## 15. `core/wuXing.ts` —— 五行计数
+
+```ts
+/** 五行计数表 */
+type CountWuXing = Record<WuXingName, number>
+
+function emptyWuXingTally(): CountWuXing
+
+/** 五行索引 → 名（0 木 1 火 2 土 3 金 4 水） */
+function wuXingName(index: WuXingIndex): WuXingName
+
+/** 天干索引 → 五行名；越界返回 undefined（不抛错） */
+function ganWuXingName(ganIndex: number): WuXingName | undefined
+
+/** 地支索引 → 五行名（本气） */
+function zhiWuXingName(zhiIndex: number): WuXingName | undefined
+
+/** 单柱的干、支五行名 */
+function pillarWuXing(pillar: { stemIndex: number; branchIndex: number }): {
+  stem?: WuXingName
+  branch?: WuXingName
+}
+
+/** 本气计数：四柱天干 + 四柱地支本气，各计 1（合计恒为 8） */
+function countWuXingMajor(pillars: Pillars): CountWuXing
+
+/** 细算：四柱天干 + 地支全部藏干（合计 > 8） */
+function countWuXingAll(pillars: Pillars): CountWuXing
+
+/** 计数表合计 */
+function wuXingTotal(tally: CountWuXing): number
+
+/** 计数表 → 百分比（条形图用；全零时全为 0） */
+function wuXingPercents(tally: CountWuXing): CountWuXing
+```
+
+> **回归背景**：这两个计数函数是从 store 里提出来并修正的。旧实现只遍历四柱天干、
+> 且手抄了一份「索引 → 五行」数组，导致 `丙戌 庚寅 丁亥 甲辰` 显示 0 土 0 水。
+> 现在数据源统一为 `constants.ts` 的 `GAN_META` / `ZHI_META`，并有 8 条用例守着。
+
+---
+
+## 16. 相关文档
 
 - [排盘算法说明书](./bazi-algorithm.md) —— 数学模型、公式推导、口径与精度
 - [调用关系图](./bazi-call-graph.md) —— 模块依赖、执行链路、Mermaid 图

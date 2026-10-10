@@ -2,7 +2,7 @@
 /**
  * PillarsGrid：四柱布局。数据全部由 store 的 pillarList 提供，本组件不访问 core。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import PillarCard from './PillarCard.vue'
@@ -11,7 +11,7 @@ import type { WuXingName } from '../core/constants'
 import { useChartStore } from '../stores/chart'
 
 const store = useChartStore()
-const { result, pillarList, clockTriplet } = storeToRefs(store)
+const { result, pillarList, clockPair } = storeToRefs(store)
 
 /** 地支十神按柱位取 */
 const godsOf = computed(() => {
@@ -25,8 +25,11 @@ const godsOf = computed(() => {
   return map
 })
 
-const wuXingRows = computed(() => {
-  const tally: Record<WuXingName, number> = store.wuXingCount
+/** 是否展开「含藏干」的细算视图 */
+const showHidden = ref(false)
+
+/** 把计数表转成条形图行数据 */
+function toRows(tally: Record<WuXingName, number>) {
   const total = Object.values(tally).reduce((sum, n) => sum + n, 0) || 1
   return (Object.entries(tally) as [WuXingName, number][]).map(([name, count]) => ({
     name,
@@ -34,7 +37,18 @@ const wuXingRows = computed(() => {
     percent: Math.round((count / total) * 100),
     color: WU_XING_COLOR[name],
   }))
-})
+}
+
+/** 本气计数：四柱天干 + 四柱地支本气，各计 1（合计 8） */
+const wuXingRows = computed(() => toRows(store.wuXingCount))
+
+/** 细算：天干 + 地支全部藏干（合计 > 8） */
+const wuXingRowsAll = computed(() => toRows(store.wuXingCountAll))
+
+const activeRows = computed(() => (showHidden.value ? wuXingRowsAll.value : wuXingRows.value))
+
+/** 当前视图的计数合计（本气视图恒为 8；藏干视图更大） */
+const activeTotal = computed(() => activeRows.value.reduce((sum, row) => sum + row.count, 0))
 </script>
 
 <template>
@@ -62,7 +76,7 @@ const wuXingRows = computed(() => {
 
     <div class="clocks">
       <div
-        v-for="item in clockTriplet"
+        v-for="item in clockPair"
         :key="item.key"
         class="clock"
         :class="{ used: item.key === result.trueSolarTime.standard }"
@@ -86,8 +100,17 @@ const wuXingRows = computed(() => {
     </div>
 
     <div class="balance">
-      <h3>五行计数（天干 + 地支本气）</h3>
-      <div v-for="row in wuXingRows" :key="row.name" class="balance-row">
+      <header class="balance-head">
+        <h3>
+          五行计数 ·
+          {{ showHidden ? '天干 + 地支全部藏干' : '天干 + 地支本气' }}
+          <span class="total">合计 {{ activeTotal }}</span>
+        </h3>
+        <button type="button" class="toggle" @click="showHidden = !showHidden">
+          {{ showHidden ? '只看本气' : '展开藏干细算' }}
+        </button>
+      </header>
+      <div v-for="row in activeRows" :key="row.name" class="balance-row">
         <span class="name">{{ row.name }}</span>
         <span class="bar">
           <i :style="{ width: `${row.percent}%`, background: row.color }" />
@@ -165,11 +188,35 @@ const wuXingRows = computed(() => {
 .balance {
   margin-top: 18px;
 }
+.balance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
 .balance h3 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 13px;
   color: var(--c-muted);
   font-weight: 600;
+}
+.balance .total {
+  margin-left: 6px;
+  color: var(--c-text);
+}
+.toggle {
+  padding: 4px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-input);
+  color: var(--c-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.toggle:hover {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
 }
 .balance-row {
   display: grid;

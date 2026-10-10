@@ -10,6 +10,8 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { buildChart } from '../core/chart'
+import { countWuXingAll, countWuXingMajor, wuXingTotal as totalOfWuXing } from '../core/wuXing'
+import type { CountWuXing } from '../core/wuXing'
 import type { ChartInput, ChartResult } from '../types/bazi'
 
 /** 常用城市（经度 + 时区），表单下拉用 */
@@ -92,30 +94,18 @@ export const useChartStore = defineStore('chart', () => {
     }))
   })
 
-  /** 五行计数（天干 + 地支本气），展示层做条形图 */
-  type WuXingName = '木' | '火' | '土' | '金' | '水'
-  const wuXingCount = computed<Record<WuXingName, number>>(() => {
-    const current = result.value
-    const tally: Record<WuXingName, number> = { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 }
-    if (!current) return tally
-    const wuXingOfGan: readonly WuXingName[] = [
-      '木',
-      '木',
-      '火',
-      '火',
-      '土',
-      '土',
-      '金',
-      '金',
-      '水',
-      '水',
-    ]
-    for (const key of ['year', 'month', 'day', 'hour'] as const) {
-      const name = wuXingOfGan[current.pillars[key].stemIndex]!
-      tally[name] += 1
-    }
-    return tally
-  })
+  /** 五行计数（天干 + 地支本气，各计 1；共 8 项） */
+  const wuXingCount = computed<CountWuXing>(() =>
+    result.value ? countWuXingMajor(result.value.pillars) : { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 },
+  )
+
+  /** 五行计数（含地支全部藏干，更细） */
+  const wuXingCountAll = computed<CountWuXing>(() =>
+    result.value ? countWuXingAll(result.value.pillars) : { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 },
+  )
+
+  /** 五行计数合计（本气视图恒为 8） */
+  const wuXingTotal = computed(() => totalOfWuXing(wuXingCount.value))
 
   /** 大运方向说明（来自 steps，避免组件再算一次） */
   const luckDirectionLabel = computed(() => {
@@ -124,7 +114,7 @@ export const useChartStore = defineStore('chart', () => {
     return output?.direction ?? '—'
   })
 
-  /** 时柱所用时间的说明文本，如「真太阳时 10:13（−20.5 分）」 */
+  /** 时柱所用时间的说明文本，如「真太阳时 10:27（−6.1 分）」 */
   const trueSolarLabel = computed(() => {
     const info = result.value?.trueSolarTime
     if (!info) return '—'
@@ -135,8 +125,8 @@ export const useChartStore = defineStore('chart', () => {
     return `${info.standardLabel} ${clock}（${sign}${Math.abs(delta).toFixed(1)} 分）`
   })
 
-  /** 三种时钟的并列对照（展示与导出用） */
-  const clockTriplet = computed(() => {
+  /** 两档时钟并列对照：北京时间（平太阳时）/ 真太阳时 */
+  const clockPair = computed(() => {
     const info = result.value?.trueSolarTime
     if (!info) return []
     const fmt = (h: number, m: number) =>
@@ -144,13 +134,8 @@ export const useChartStore = defineStore('chart', () => {
     return [
       {
         key: 'standard' as const,
-        label: '北京时间',
+        label: '北京时间（平太阳时）',
         clock: fmt(info.standardHour, info.standardMinute),
-      },
-      {
-        key: 'mean_solar' as const,
-        label: '平太阳时',
-        clock: fmt(info.meanSolarHour, info.meanSolarMinute),
       },
       {
         key: 'true_solar' as const,
@@ -203,15 +188,18 @@ export const useChartStore = defineStore('chart', () => {
     const current = result.value
     if (!current) return ''
     const info = current.trueSolarTime
+    const pad = (n: number) => String(n).padStart(2, '0')
     const lines = [
       `出生：${current.input.birthDatetime}（${current.input.gender === 'male' ? '男' : '女'}）`,
       `出生地：${current.input.birthPlace ?? '（未填）'}  经度：${current.input.longitude}  时区：${current.input.timezone}`,
       `采用口径：${info.standardLabel}`,
-      `北京时间 ${String(info.standardHour).padStart(2, '0')}:${String(info.standardMinute).padStart(2, '0')}` +
-        ` / 平太阳时 ${String(info.meanSolarHour).padStart(2, '0')}:${String(info.meanSolarMinute).padStart(2, '0')}` +
-        ` / 真太阳时 ${String(info.trueSolarHour).padStart(2, '0')}:${String(info.trueSolarMinute).padStart(2, '0')}`,
+      `北京时间 ${pad(info.standardHour)}:${pad(info.standardMinute)}` +
+        ` / 真太阳时 ${pad(info.trueSolarHour)}:${pad(info.trueSolarMinute)}`,
       `节气：${current.solarTerm.termName}（月令 ${current.solarTerm.monthOrder}，太阳黄经 ${current.solarTerm.lambda}°）`,
       `四柱：${current.bazi}`,
+      `五行：${Object.entries(wuXingCount.value)
+        .map(([name, count]) => `${name}${count}`)
+        .join(' ')}`,
       `十神：年 ${current.tenGods.yearStem} / 月 ${current.tenGods.monthStem} / 日 日主 / 时 ${current.tenGods.hourStem}`,
       `大运：${luckDirectionLabel.value}，${current.luckCycles
         .slice(0, 8)
@@ -235,9 +223,11 @@ export const useChartStore = defineStore('chart', () => {
     bazi,
     pillarList,
     wuXingCount,
+    wuXingCountAll,
+    wuXingTotal,
     luckDirectionLabel,
     trueSolarLabel,
-    clockTriplet,
+    clockPair,
     calculate,
     applyInput,
     patchInput,

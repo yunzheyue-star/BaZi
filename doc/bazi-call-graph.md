@@ -131,6 +131,7 @@ flowchart LR
     tenGods["tenGods.ts<br/>十神"]
     luck["luck.ts<br/>大运 / 流年"]
     shensha["shensha.ts<br/>神煞"]
+    wuXing["wuXing.ts<br/>五行计数"]
     types["types/bazi.ts"]
 
     chart --> pillars
@@ -140,6 +141,8 @@ flowchart LR
     chart --> tenGods
     chart --> luck
     chart --> shensha
+    wuXing --> constants
+    wuXing --> ganzhi
     pillars --> calendar
     pillars --> ganzhi
     tenGods --> ganzhi
@@ -159,6 +162,7 @@ flowchart LR
     tenGods -.-> types
     luck -.-> types
     shensha -.-> types
+    wuXing -.-> types
 
     classDef leaf fill:#f5f7fa,stroke:#6b7280,color:#1f2329
     class constants,ganzhi leaf
@@ -170,6 +174,8 @@ flowchart LR
   所有查表与模运算都下沉到这里 —— 这正是「所有查表放 constants、所有模运算放 ganzhi」的落地结果。
 - `calendar.ts → ganzhi.ts` 只为取一个 `mod()`；这是 core 内部最小的合理耦合。
 - `luck.ts → tenGods.ts` 是为了给流年补十神标注，方向是单向的，`tenGods` 不知道 `luck` 存在。
+- `wuXing.ts` 只依赖 `constants`（五行归属表）与 `ganzhi`（藏干查表），与 `chart.ts` 平级：
+  它是**独立可测的派生计算**，由 store 直接调用，不经过 `buildChart`（五行不进 `ChartResult`）。
 - **无环**：任意两模块之间不存在双向依赖。
 
 ---
@@ -201,13 +207,12 @@ sequenceDiagram
     CH->>CH: timezoneOffsetMinutes(civil, timezone)
     CH->>CA: julianDay(civil) → birthJdUt = local − offset/1440
 
-    Note over CH: ① 计时口径（三档时钟并列，只有时柱消费）
+    Note over CH: ① 计时口径（两档时钟并列，只有时柱消费）
     CH->>CA: trueSolarCorrection(civilUt, longitude, 120)
     CA->>CA: equationOfTime(jd) ← solarApparentLongitude(jd)
     CA-->>CH: { longitudeDelta, eot, delta }
-    CH->>CH: 北京时间 = 民用钟表时
-    CH->>CH: 平太阳时 = 北京时 + 经度时差
-    CH->>CH: 真太阳时 = 平太阳时 + 均时差
+    CH->>CH: 北京时间 = 民用钟表时（= 平太阳时，不修正）
+    CH->>CH: 真太阳时 = 北京时间 + 均时差
     CH->>CH: 按 input.timeStandard 选一个给时柱
 
     Note over CH: ② 年柱（立春为界）
@@ -293,12 +298,10 @@ flowchart LR
     B --> C["timezoneOffsetMinutes<br/>+480 min"]
     C --> D["birthJdUt<br/>2454663.60"]
     B --> E["julianDay − offset<br/>→ civilUt"]
-    E --> F["trueSolarCorrection<br/>经度时差 −14.4 / EoT −6.08"]
-    F --> G0["北京时间 10:33"]
-    F --> G1["平太阳时 10:19"]
-    F --> G2["真太阳时 10:13"]
+    E --> F["trueSolarCorrection<br/>经度时差 −14.4（仅展示）/ EoT −6.08"]
+    F --> G0["北京时间（平太阳时）10:33"]
+    F --> G2["真太阳时 10:27"]
     G0 --> G{"input.timeStandard<br/>挑选时柱所用时间"}
-    G1 --> G
     G2 --> G
 
     D --> H["solarApparentLongitude<br/>λ = 113.9414°"]
@@ -324,6 +327,7 @@ flowchart LR
     S --> U["hiddenStems 查表"]
     P --> V["tenGods（以 i_d=3 为「我」）"]
     U --> V
+    S --> V2["countWuXingMajor / countWuXingAll<br/>木1 火3 土3 金0 水1"]
 
     H --> W["daysToNextTerm<br/>21.37 天"]
     M --> X["luckCycles<br/>k_m + d·n"]
@@ -335,6 +339,7 @@ flowchart LR
     Y --> R2
     Z --> R2
     V --> R2
+    V2 --> R2
     T --> R2
 
     classDef num fill:#fff8e1,stroke:#c2a13a,color:#4a3a05
@@ -512,7 +517,7 @@ flowchart LR
 4. `core` 做 I/O：纯函数可复现性被破坏，`buildChart` 将无法用于批量校验。
 
 `core` 中唯一的时间依赖是流年起始年，已通过 `options.referenceYear` 显式注入，
-使 `buildChart` 在给定 options 下仍是可复现的纯函数（见 [算法说明书 §11](./bazi-algorithm.md#11-流年)）。
+使 `buildChart` 在给定 options 下仍是可复现的纯函数（见 [算法说明书 §12](./bazi-algorithm.md#12-流年)）。
 
 ---
 
@@ -522,12 +527,11 @@ flowchart LR
 flowchart TB
     subgraph 输入
         I1["出生时间 · 性别 · 出生地经度 · 时区"]
-        I2["换日流派 · 计时口径（三档）"]
+        I2["换日流派 · 计时口径（北京时间 / 真太阳时）"]
     end
     subgraph 时钟
-        C0["北京时间 = 民用钟表时"]
-        C1["平太阳时 = 北京时 + 经度时差"]
-        C2["真太阳时 = 平太阳时 + 均时差"]
+        C0["北京时间 = 民用钟表时<br/>（平太阳时，不修正）"]
+        C2["真太阳时 = 北京时间 + 均时差"]
     end
     subgraph 天文
         A1["太阳视黄经 λ"]
@@ -542,6 +546,7 @@ flowchart TB
     end
     subgraph 派生
         D1["藏干 · 十神"]
+        D4["五行计数（本气 / 藏干）"]
         D2["大运 · 流年"]
         D3["神煞"]
     end
@@ -551,10 +556,8 @@ flowchart TB
     end
 
     I1 --> C0
-    I2 --> C1
     A3 --> C2
     C0 --> P4
-    C1 --> P4
     C2 --> P4
     I1 --> A1
     A1 --> P2
@@ -566,16 +569,17 @@ flowchart TB
     P2 --> D1
     P3 --> D1
     P4 --> D1
+    D1 --> D4["五行计数<br/>本气 / 藏干两口径"]
     P2 --> D2
     P1 --> D2
     P3 --> D3
     P1 --> D3
     D1 --> O1
+    D4 --> O1
     D2 --> O1
     D3 --> O1
     A1 --> O2
     A2 --> O2
     C0 --> O2
-    C1 --> O2
     C2 --> O2
 ```

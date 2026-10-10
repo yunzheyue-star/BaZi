@@ -35,20 +35,20 @@ export type Gender = 'male' | 'female'
 export type DayBoundary = 'midnight' | 'zi_hour'
 
 /**
- * 计时口径（三档，决定时柱用哪个时间）
+ * 计时口径（两档，决定时柱用哪个时间）
  *
- * - `true_solar` 真太阳时：出生地经度的平太阳时 + 均时差（需给出出生地经度）
- * - `mean_solar` 平太阳时：出生地经度的平太阳时（只做经度时差，不含均时差）
- * - `standard`   北京时间：东经 120° 标准时，不做任何时差修正
- *                （仅当出生地时区为 UTC+8 时，「北京时间」这一称法才成立）
+ * 本系统的「平太阳时」就是**北京时间**（东经 120° 标准时，即钟表时）：
+ * 民用钟表时本身就是平太阳时的一种（区时），所以不再单独拆一档。
+ *
+ * - `true_solar` 真太阳时：北京时间 + 均时差 EoT（由出生时刻的太阳黄经反解）
+ * - `standard`   北京时间：不做任何时差修正，直接用钟表时
  */
-export type TimeStandard = 'true_solar' | 'mean_solar' | 'standard'
+export type TimeStandard = 'true_solar' | 'standard'
 
 /** 各计时口径的展示名 */
 export const TIME_STANDARD_LABEL: Record<TimeStandard, string> = {
   true_solar: '真太阳时',
-  mean_solar: '平太阳时',
-  standard: '北京时间',
+  standard: '北京时间（平太阳时）',
 }
 
 /** 大运顺逆 */
@@ -112,19 +112,20 @@ export interface TrueSolarTimeInfo {
   standard: TimeStandard
   /** 该口径的展示名 */
   standardLabel: string
-  /** 经度时差（分钟，(longitude − 120) × 4） */
+  /**
+   * 经度时差（分钟，(longitude − 120) × 4）。
+   * 仅作展示信息与出生地留痕 —— 北京时间本身就是平太阳时的一种（区时），
+   * 不再把经度时差计入任何一档的修正量。
+   */
   longitudeDeltaMinutes: number
-  /** 均时差（分钟），仅 true_solar 档计入 */
+  /** 均时差（分钟），仅 true_solar 档计入合计 */
   equationOfTimeMinutes: number
-  /** 合计偏移（分钟）：standard 档恒为 0 */
+  /** 合计偏移（分钟）：standard 档恒为 0，true_solar 档为 EoT */
   deltaMinutes: number
-  /** 北京时间的时分（东经 120° 标准时，等于民用钟表时） */
+  /** 北京时间的时分（= 民用钟表时 = 平太阳时） */
   standardHour: number
   standardMinute: number
-  /** 出生地平太阳时的时分 */
-  meanSolarHour: number
-  meanSolarMinute: number
-  /** 出生地真太阳时的时分 */
+  /** 真太阳时的时分（北京时间 + EoT） */
   trueSolarHour: number
   trueSolarMinute: number
 }

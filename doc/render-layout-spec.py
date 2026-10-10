@@ -7,7 +7,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
 OUT_DIR = "doc"
-W, H = 1180, 560
+W, H = 1180, 720
 BG = "#f6f7f9"
 CARD = "#ffffff"
 BORDER = "#e2e5ea"
@@ -42,6 +42,7 @@ f_title = font(F_SANS_BD, 17)
 f_bazi = font(F_SERIF, 21)
 f_clock_label = font(F_SANS, 12)
 f_clock_value = font(F_SANS_BD, 17)
+f_h3 = font(F_SANS_BD, 13)
 
 # 四柱数据（2008-07-16 10:33 男 / 真太阳时口径的实际结果）
 PILLARS = [
@@ -56,9 +57,8 @@ PILLARS = [
 ]
 
 CLOCKS = [
-    {"label": "北京时间", "value": "10:33", "used": False},
-    {"label": "平太阳时", "value": "10:19", "used": False},
-    {"label": "真太阳时 · 时柱采用", "value": "10:13", "used": True},
+    {"label": "北京时间（平太阳时）", "value": "10:33", "used": True},
+    {"label": "真太阳时", "value": "10:27", "used": False},
 ]
 
 
@@ -92,16 +92,16 @@ d.text((44, 34), "四柱", font=f_title, fill=TEXT)
 d.text((44, 62), "戊子 己未 丁巳 乙巳", font=f_bazi, fill=TEXT)
 
 d.text((W - 400, 34), "时辰所用（真太阳时）", font=f_small, fill=MUTED)
-d.text((W - 400, 50), "真太阳时 10:13（−20.5 分）", font=f_hidden_meta, fill=TEXT)
+d.text((W - 400, 50), "真太阳时 10:27（−6.1 分）", font=f_hidden_meta, fill=TEXT)
 d.text((W - 190, 34), "节气", font=f_small, fill=MUTED)
 d.text((W - 190, 50), "小暑 · 月令 6", font=f_hidden_meta, fill=TEXT)
 
-# ===== 三种时钟对照条：等价于 .clocks 三列 =====
+# ===== 两档时钟对照条：等价于 .clocks 两列 =====
 STRIP_TOP = 92
 STRIP_H = 46
 GAP = 10
 inner_x0, inner_x1 = 44, W - 44
-col_w = (inner_x1 - inner_x0 - GAP * 2) // 3
+col_w = (inner_x1 - inner_x0 - GAP) // 2
 for i, clock in enumerate(CLOCKS):
     x0 = inner_x0 + i * (col_w + GAP)
     box = (x0, STRIP_TOP, x0 + col_w, STRIP_TOP + STRIP_H)
@@ -163,6 +163,28 @@ for i, p in enumerate(PILLARS):
     if i == 0:
         d.line((x0 + 4, line_y, x0 + card_w - 4, line_y), fill="#e8a0a0")
 
+# ===== 五行计数（本气视图）：修正 bug 后的实际数值 =====
+BAL_TOP = GRID_TOP + card_h + 16
+d.text((inner_x0, BAL_TOP), "五行计数 · 天干 + 地支本气", font=f_h3, fill=MUTED)
+d.text((inner_x0 + 250, BAL_TOP), "合计 8", font=f_h3, fill=TEXT)
+right_text(d, inner_x1, BAL_TOP - 2, "展开藏干细算", f_clock_label, TEXT)
+
+BAR_TOP = BAL_TOP + 24
+BAR_H = 10
+WUXING_COUNTS = [("木", 1), ("火", 3), ("土", 3), ("金", 0), ("水", 1)]
+max_count = max(n for _, n in WUXING_COUNTS)
+label_w, count_w, row_gap = 22, 30, 8
+bar_x0 = inner_x0 + label_w + 8
+bar_x1 = inner_x1 - count_w - 8
+for name, count in WUXING_COUNTS:
+    rounded(d, (bar_x0, BAR_TOP, bar_x1, BAR_TOP + BAR_H), 5, CHIP)
+    if count > 0:
+        width = int((bar_x1 - bar_x0) * count / max_count)
+        rounded(d, (bar_x0, BAR_TOP, bar_x0 + width, BAR_TOP + BAR_H), 5, WX[name])
+    d.text((inner_x0, BAR_TOP - 4), name, font=f_hidden_meta, fill=TEXT)
+    right_text(d, inner_x1, BAR_TOP - 4, str(count), f_hidden_meta, TEXT)
+    BAR_TOP += BAR_H + row_gap
+
 # ===== 单元测试等价校验 =====
 def check():
     errs = []
@@ -179,9 +201,9 @@ def check():
     # 卡片纵向不溢出
     if GRID_TOP + card_h > CARD_BOX[3] - 8:
         errs.append("四柱卡片纵向溢出")
-    # 时钟三列不重叠
-    if inner_x0 + 3 * col_w + 2 * GAP > inner_x1 + 1:
-        errs.append("时钟三列横向溢出")
+    # 时钟两列不重叠
+    if inner_x0 + 2 * col_w + GAP > inner_x1 + 1:
+        errs.append("时钟两列横向溢出")
     return errs
 
 

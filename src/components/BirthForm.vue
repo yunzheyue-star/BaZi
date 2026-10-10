@@ -10,7 +10,7 @@ import type { CityPreset } from '../stores/chart'
 import type { DayBoundary, Gender, TimeStandard } from '../types/bazi'
 
 const store = useChartStore()
-const { input, error, calculating, result, clockTriplet } = storeToRefs(store)
+const { input, error, calculating, result, clockPair } = storeToRefs(store)
 
 /** datetime-local 需要 "YYYY-MM-DDTHH:mm"，store 里存 "YYYY-MM-DD HH:mm" */
 const localDatetime = computed<string>({
@@ -36,15 +36,16 @@ const city = computed<string>({
   },
 })
 
-/** 计时口径的三档说明 */
+/** 计时口径的两档说明（平太阳时即北京时间，故不再单列） */
 const STANDARDS: { value: TimeStandard; label: string; hint: string }[] = [
-  { value: 'standard', label: '北京时间', hint: '东经 120° 标准时，不做任何时差修正' },
-  { value: 'mean_solar', label: '平太阳时', hint: '出生地经度的平太阳时，只做经度时差' },
-  { value: 'true_solar', label: '真太阳时', hint: '平太阳时 + 均时差，需出生地经度' },
+  { value: 'standard', label: '北京时间', hint: '钟表时，也就是平太阳时（东经 120° 标准时），不做任何修正' },
+  { value: 'true_solar', label: '真太阳时', hint: '北京时间 + 均时差 EoT，按出生时刻的太阳黄经反解' },
 ]
 
-/** 需要经度的口径 */
-const needsLongitude = computed(() => input.value.timeStandard !== 'standard')
+/** 当前口径的说明 */
+const standardHint = computed(
+  () => STANDARDS.find((s) => s.value === input.value.timeStandard)?.hint ?? '',
+)
 
 function onGender(value: Gender): void {
   store.patchInput({ gender: value })
@@ -122,8 +123,8 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
         />
       </label>
 
-      <label class="field" :class="{ dim: !needsLongitude }">
-        <span>经度（东经为正）{{ needsLongitude ? '' : '· 当前口径不需要' }}</span>
+      <label class="field">
+        <span>经度（东经为正 · 仅作出生地留痕与经度时差展示）</span>
         <input :value="input.longitude" type="number" step="0.01" min="-180" max="180" @input="onLongitude" />
       </label>
 
@@ -149,9 +150,7 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
             {{ item.label }}
           </button>
         </div>
-        <p class="hint">
-          {{ STANDARDS.find((s) => s.value === input.timeStandard)?.hint }}
-        </p>
+        <p class="hint">{{ standardHint }}</p>
       </div>
 
       <div class="field span-2">
@@ -177,7 +176,7 @@ function loadSample(which: 'a' | 'b' | 'default'): void {
 
     <div v-if="result" class="clocks">
       <div
-        v-for="item in clockTriplet"
+        v-for="item in clockPair"
         :key="item.key"
         class="clock"
         :class="{ used: item.key === input.timeStandard }"
@@ -267,10 +266,10 @@ select {
   font-size: 12px;
   color: var(--c-muted);
 }
-/** 三种时钟对照 */
+/** 两档时钟对照 */
 .clocks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 16px;
   padding-top: 14px;
