@@ -46,5 +46,6 @@ __screenshots__/
 doc/.region-cache/
 
 # 会话记录解码的中间产物（doc/history-export.mjs 会再生，体积大）
-doc/session-raw.jsonl
-doc/history-extract.md
+/session-raw.jsonl
+/history-extract.json
+/history-extract.md
