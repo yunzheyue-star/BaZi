@@ -25,6 +25,10 @@ npm install && npm run dev
 
 其他命令：`npm run build`（类型检查 + 构建）· `npm run test:unit`（Vitest）· `npm run type-check`
 
+**环境要求**：Node `^22.18.0 || >=24.12.0`。开发环境为 WSL2 上的 Fedora Linux 44
+（`npm install` 会装平台相关的原生模块，Windows 与 Linux 的 `node_modules` 不可混用）；
+迁移细节与 WSL 踩坑见 [环境说明](doc/migrate-to-wsl.md)。
+
 ## 技术栈
 
 Vue3 · TypeScript · Vite · Pinia · Vitest
@@ -75,6 +79,7 @@ src/
 - [算法说明书](doc/bazi-algorithm.md) —— 公式推导、边界口径、精度实测、完整算例
 - [调用关系图](doc/bazi-call-graph.md) —— 分层架构、模块依赖、执行时序（9 张 Mermaid 图）
 - [主截图重拍方法](doc/screenshot-howto.md) —— 无头浏览器截图步骤与踩坑记录
+- [WSL 环境说明](doc/migrate-to-wsl.md) —— 迁移到 Fedora 44 的过程与 WSL 踩坑清单
 
 ## 免责声明
 

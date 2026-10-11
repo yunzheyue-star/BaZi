@@ -1,0 +1,26 @@
+# 统一换行符策略：仓库内一律 LF
+#
+# 起因：本项目同时在 Windows 与 WSL/Fedora 两侧开发。Windows 侧编辑的 .sh
+# 若带 CRLF，克隆到 Linux 后执行会报 `/bin/sh^M: bad interpreter`。
+# 这里把文本文件统一钉为 LF（检出也是 LF），二进制文件不做转换。
+
+* text=auto eol=lf
+
+# 二进制：不做换行符转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+
+# 明确 LF 的脚本与配置
+*.sh text eol=lf
+*.bash text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.vue text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
