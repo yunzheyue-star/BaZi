@@ -44,3 +44,7 @@ __screenshots__/
 
 # 行政区划数据源的本地缓存（doc/gen_regions.py 生成，可再生）
 doc/.region-cache/
+
+# 会话记录解码的中间产物（doc/history-export.mjs 会再生，体积大）
+doc/session-raw.jsonl
+doc/history-extract.md

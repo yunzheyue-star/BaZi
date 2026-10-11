@@ -75,6 +75,8 @@ src/
 
 ## 详细文档
 
+- [项目历史与决策沿革](doc/history.md) —— **接手前先读**：只在对话里存在的约定与踩坑
+- [需求原始记录](doc/history-archive.md) —— 每次需求的原文归档（含时间戳）
 - [接口文档](doc/bazi-api.md) —— 全部导出函数的签名、类型、异常与组件契约
 - [算法说明书](doc/bazi-algorithm.md) —— 公式推导、边界口径、精度实测、完整算例
 - [调用关系图](doc/bazi-call-graph.md) —— 分层架构、模块依赖、执行时序（9 张 Mermaid 图）
