@@ -53,6 +53,3 @@ doc/.region-cache/
 # diff 比对等的临时目录（用后即删；此处兜底防误提交）
 /.diffcheck/
 .npm-cache/
-
-#Agent
-.dsh/
